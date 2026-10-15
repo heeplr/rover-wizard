@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rover-wizard"
+version = "0.1.0"
+description = "Terminal wizard that sets up, calibrates and tunes ArduPilot Rover vehicles over MAVLink"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=0.80",
+    "pymavlink>=2.4.41",
+]
+keywords = ["ardupilot", "rover", "mavlink", "textual", "tuning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+rover-wizard = "rover_wizard.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["rover_wizard*"]
+
+[tool.setuptools.package-data]
+"rover_wizard.ui" = ["wizard_text.json", "param_docs.json", "wizard_app.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+
+[tool.black]
+line-length = 120

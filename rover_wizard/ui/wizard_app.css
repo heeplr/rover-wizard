@@ -1,0 +1,94 @@
+
+#connect { width: 96; height: auto; margin: 1 2; padding: 1 2; border: round $primary; }
+#c-title { text-style: bold; margin-bottom: 1; }
+#body { height: 1fr; }
+/* Left column: step list on top (scrolls), live RC / servo panel below it (always visible). */
+#left { width: 52; border-right: solid $primary; }
+#sidebar { height: 1fr; padding: 0 1; }
+#monitor { height: auto; border-top: solid $primary; padding: 0 1; }
+.panel-title { text-style: bold; color: $warning; margin-top: 1; }
+/* Accel and Gyro side by side; a hidden section's column takes no space */
+#imu-monitors { height: auto; }
+.monitor-column { width: auto; min-width: 12; height: auto; }
+#servo-plus, #servo-minus { height: 1; }
+Button.servo-btn-plus, Button.servo-btn-minus { width: 3; min-width: 3; height: 1; border: none; padding: 0; margin: 0; }
+Button.servo-btn-plus { color: green; }
+Button.servo-btn-minus { color: red; }
+Button.servo-btn-plus:hover { text-style: bold; color: white; background: green }
+Button.servo-btn-minus:hover { text-style: bold; color: white; background: red }
+/* Relay buttons: the number in white, on red while the relay is off and on green while it is on;
+   brighter under the pointer, brighter and bold when focused */
+#relay-buttons { height: 1; width: auto; }
+Button.relay-btn { width: 3; min-width: 3; height: 1; border: none; padding: 0; margin: 0;
+                   color: white; text-style: none; background: #b00000; }
+Button.relay-btn:hover { background: #ff3030; }
+Button.relay-btn:focus { background: #ff3030; text-style: bold; }
+Button.relay-btn.relay-on { background: #008000; }
+Button.relay-btn.relay-on:hover { background: #00d000; }
+Button.relay-btn.relay-on:focus { background: #00d000; text-style: bold; }
+/* Phase headings sit flush left; step buttons are indented under their phase to show the hierarchy. */
+.phase { text-style: bold; color: $warning; margin-top: 1; text-align: left; content-align: left middle; padding-left: 0; }
+Button.nav {
+    width: 100%; height: 1; min-width: 0; border: none;
+    padding: 0 1 0 3;
+    text-align: left; content-align: left middle;
+}
+Button.nav:disabled { color: $text-disabled; text-style: dim; }
+#main { width: 1fr; padding: 0 1; }
+/* Status bar: deliberately high-contrast so link/armed/mode state is easy to spot at a glance. */
+#status { height: 1; background: blue; color: yellow; text-style: bold; }
+/* Step form: takes the remaining height and scrolls. */
+#stepbox { height: 1fr; }
+.trow { height: 3; }
+.title { width: 1fr; height: 3; text-style: bold; content-align: left middle; }
+.warn { color: $warning; margin-bottom: 1; }
+.dim { color: gray; text-style: italic; height: 3; content-align: left middle; padding-left: 1; }
+.frow { height: 3; }
+/* intro text of each steps gets a border and the empty bottom line is removed */
+.intro { border: heavy $accent; margin-bottom: 2; }
+.intro > MarkdownBlock:last-child {
+    margin-bottom: 0;
+}
+/* Multi-line read-only display fields (e.g. "Vehicle info:") get an auto-height row and a bordered box. */
+.frow-tall { height: auto; min-height: 3; }
+.display-value { width: 1fr; height: auto; min-height: 3; padding: 0 1; border: round $secondary; }
+/* Field labels are bold (with a trailing colon added in code) to stand out from the entered value. */
+.lbl { width: 44; height: 3; content-align: left middle; text-style: bold; }
+.field-heading { width: 1fr; height: 3; content-align: left bottom; text-style: bold; color: $warning; }
+.frow Input { width: 28; }
+.frow Select { width: 44; }
+.frow Checkbox { width: auto; }
+/* the hint takes the room left in the row (long ones are cut with "…"), so the buttons and ❓ always fit */
+.hint { width: 1fr; height: 3; content-align: left middle; padding: 0 1; text-wrap: nowrap; text-overflow: ellipsis; }
+.frow-tall .hint { width: 1; }  /* a display box needs the room; its hint is always empty */
+.unit { width: auto; height: 3; content-align: left middle; padding: 0 0 0 1; }
+Button.help { width: 5; min-width: 5; }
+Static.help { width: 5; min-width: 5; }  /* empty placeholder where a field has no ❓ button */
+.actions { height: auto; margin-top: 2; margin-bottom: 2 }  /* a blank line between the fields and the step's buttons */
+Button.inline-act { width: auto; min-width: 8; margin-left: 1; }
+.arow { height: 3; }
+.arow Static.dim { width: 1fr; }  /* take the rest of the row, not the full width beside the button */
+Button.act { width: auto; min-width: 36; }
+#nav { height: 3; }
+#ctl { height: 3; }
+#nav Button, #ctl Button { margin-right: 1; }
+#log { height: 12; border: round $secondary; }
+HelpScreen, ConfirmScreen, LeaveStepScreen, ProbeScreen { align: center middle; }
+#help-box { width: 90%; height: 85%; border: thick $primary; background: $surface; padding: 1 2; }
+#help-title { text-style: bold; margin-bottom: 1; }
+#help-scroll { height: 1fr; }
+#confirm-box { width: 70; height: auto; border: thick $error; background: $surface; padding: 1 2; }
+#probe-box { width: 90%; height: 80%; border: thick $warning; background: $surface; padding: 1 2; }
+#probe-status { height: 1fr; border: round $secondary; margin: 1 0; }
+/* Compact layout (narrow terminals): shorter label column (labels wrap), narrower inputs, buttons share rows. */
+Screen.-compact .lbl { width: 22; }
+Screen.-compact .frow Input { width: 14; }
+Screen.-compact .frow Select { width: 26; }
+Screen.-compact Button.inline-act { min-width: 5; }
+Screen.-compact #nav Button { width: 1fr; min-width: 8; margin-right: 0; }
+Screen.-compact #ctl { layout: grid; grid-size: 3; grid-gutter: 0 1; height: 6; }
+Screen.-compact #ctl Button { width: 1fr; margin-right: 0; }
+/* no blank line above the side-panel titles: more rows for the step list on short terminals */
+Screen.-compact .panel-title { margin-top: 0; }
+Screen.-compact #log { height: 6; }
+Screen.-compact #status { height: auto; }  /* wrap instead of cutting off GPS/battery */
