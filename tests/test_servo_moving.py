@@ -20,13 +20,15 @@ from rover_wizard.ardupilot_defs import (
 from rover_wizard.motion.servo_test import PANEL_STEERING_HOLD_SECONDS, STEERING_HOLD_SECONDS
 from rover_wizard.steps.motor_output import DEADZONE_STEP_SECONDS, action_find_throttle_deadzone
 
-from util.helpers import BY_ID, act, enter, make, wait_until
+from util.helpers import BY_ID, TEST_TIME_SCALE, act, enter, make, wait_until
 
 # The simulator's front-wheel layout:
 STEERING_OUTPUT = 1
 THROTTLE_OUTPUT = 3
 # no function assigned
 FREE_OUTPUT = 5
+# 1 s of simulated time margin = 200 ms real time
+SLOWER_TIME_SCALE = 5.0
 
 
 @pytest.fixture
@@ -36,6 +38,15 @@ def wizard():
     yield vehicle, ctx
     ctx.servos.release()
     vehicle.disconnect()
+
+
+@pytest.fixture
+def slower_clock():
+    """Simulated time at SLOWER_TIME_SCALE instead of the usual 20x: a test that compares two waits of a few
+    seconds then has a margin a busy test machine (e.g. a CI runner) can't eat up."""
+    timebase.set_time_scale(SLOWER_TIME_SCALE)
+    yield
+    timebase.set_time_scale(TEST_TIME_SCALE)
 
 
 def steering_pwm(vehicle):
@@ -76,9 +87,10 @@ def test_steering_test_buttons_move_servo_without_arming(wizard, label, expected
 
 def test_steering_hold_ends_by_itself(wizard):
     vehicle, ctx = wizard
+    # timed from the command: noticing the 1900 us late (a busy test machine) must not shorten the measured hold
+    start = timebase.now()
     ctx.servos.hold_steering(1.0)
     assert wait_until(lambda: steering_pwm(vehicle) == 1900)
-    start = timebase.now()
     assert wait_until(lambda: steering_pwm(vehicle) == 1500, timeout=STEERING_HOLD_SECONDS + 5)
     assert timebase.now() - start >= STEERING_HOLD_SECONDS - 0.5
 
@@ -220,12 +232,14 @@ def test_panel_log_shows_the_reported_pulse_width(wizard):
     assert ctx.servos.nudge(FREE_OUTPUT, +1) == "SERVO5: 1525 us"
 
 
-def test_panel_clicks_add_up_while_the_hold_lasts(wizard):
+def test_panel_clicks_add_up_while_the_hold_lasts(wizard, slower_clock):
     vehicle, ctx = wizard
     # clicks 2 s apart: longer than the Test buttons' hold, shorter than the panel's
     assert STEERING_HOLD_SECONDS < 2.0 < PANEL_STEERING_HOLD_SECONDS
+    first_click = timebase.now()
     assert "+10%" in ctx.servos.nudge(STEERING_OUTPUT, +1)
-    timebase.sleep(2.0)
+    # 2 s after the first click started, however long it took to report its pulse width
+    timebase.sleep(first_click + 2.0 - timebase.now())
     assert "+20%" in ctx.servos.nudge(STEERING_OUTPUT, +1)
     # after the hold the steering is released and the next click starts from the centre again
     timebase.sleep(PANEL_STEERING_HOLD_SECONDS + 1.0)
