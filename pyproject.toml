@@ -37,3 +37,8 @@ pythonpath = [".", "tests"]
 
 [tool.black]
 line-length = 120
+
+[tool.coverage.run]
+relative_files = true
+source = ["rover_wizard"]
+branch = true

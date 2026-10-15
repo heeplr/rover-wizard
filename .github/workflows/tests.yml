@@ -74,7 +74,7 @@ jobs:
 
       # coverage settings (source, branch coverage, relative paths) are in pyproject.toml
       - name: Run the tests with coverage
-        run: python -m pytest -ra --cov
+        run: python -m pytest -ra --cov=rover_wizard --cov-config=pyproject.toml
 
       # Pull requests from forks get a read-only token, so only same-repository events publish.
       - name: Coverage badge and pull-request comment
