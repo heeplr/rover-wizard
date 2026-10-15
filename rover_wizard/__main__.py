@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from typing import TYPE_CHECKING
 
 from . import __version__
 from .vehicle.link import DEFAULT_BAUD_RATE
