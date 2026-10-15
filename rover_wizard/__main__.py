@@ -9,6 +9,8 @@ import sys
 from . import __version__
 from .vehicle.link import DEFAULT_BAUD_RATE
 
+if TYPE_CHECKING:
+    from .ui.wizard_app import WizardApp
 
 def _is_missing(module: str) -> bool:
     """Whether an optional dependency is not installed (checked without importing it)."""
@@ -16,12 +18,14 @@ def _is_missing(module: str) -> bool:
 
 
 def app(conn="", baud=DEFAULT_BAUD_RATE, demo=False, demo_skid=False) -> WizardApp:
-    """Parse the command line and run the parameter mode (-p) or the wizard UI; returns the process exit code."""
+    """Launch wizard UI; returns the textual app"""
     from .ui.wizard_app import WizardApp
+
     return WizardApp(conn, baud, demo, demo_skid)
 
 
 def main(argv=None) -> int:
+    """Parse the command line and run the parameter mode (-p) or launch TUI"""
     parser = argparse.ArgumentParser(
         prog="rover_wizard", description="ArduPilot Rover setup & tuning wizard (Textual UI)"
     )
@@ -53,6 +57,7 @@ def main(argv=None) -> int:
         print("Missing dependency: pip install textual pymavlink", file=sys.stderr)
         return 1
     return app(args.conn, args.baud, demo=demo, demo_skid=args.demo_skid).run()
+
 
 if __name__ == "__main__":
     sys.exit(main())
