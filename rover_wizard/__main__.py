@@ -15,8 +15,13 @@ def _is_missing(module: str) -> bool:
     return importlib.util.find_spec(module) is None
 
 
-def app(argv=None) -> WizardApp:
+def app(conn="", baud=DEFAULT_BAUD_RATE, demo=False, demo_skid=False) -> WizardApp:
     """Parse the command line and run the parameter mode (-p) or the wizard UI; returns the process exit code."""
+    from .ui.wizard_app import WizardApp
+    return WizardApp(conn, baud, demo, demo_skid)
+
+
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="rover_wizard", description="ArduPilot Rover setup & tuning wizard (Textual UI)"
     )
@@ -47,13 +52,7 @@ def app(argv=None) -> WizardApp:
     if _is_missing("textual") or (not demo and _is_missing("pymavlink")):
         print("Missing dependency: pip install textual pymavlink", file=sys.stderr)
         return 1
-    from .ui.wizard_app import WizardApp
-
-    return WizardApp(args.conn, args.baud, demo=demo, demo_skid=args.demo_skid)
-
-
-def main(argv=None) -> int:
-    return app(argv).run()
+    return app(args.conn, args.baud, demo=demo, demo_skid=args.demo_skid).run()
 
 if __name__ == "__main__":
     sys.exit(main())
