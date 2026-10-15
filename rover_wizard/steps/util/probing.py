@@ -4,6 +4,9 @@ afterwards."""
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
+
+from ...util.timebase import now
 from .actions import action_reboot_flight_controller
 
 # 'Show ...' buttons log live readings once a second this long
@@ -44,7 +47,25 @@ def restore_on_failure(ctx, originals: dict):
 
 # [s] between IMU/compass readings while averaging
 SENSOR_SAMPLE_SPACING = 0.1
+# fewer than IMU_MIN_SAMPLES readings in the averaging time (a slow link, a busy computer): keep reading, up to this
+# many times as long
+SAMPLE_TIME_EXTENSION = 3
 
+
+def collect_still_readings(ctx, read: Callable, seconds: float) -> list:
+    """read() every SENSOR_SAMPLE_SPACING for `seconds` while the vehicle is held still (None = no reading now);
+    longer if fewer than IMU_MIN_SAMPLES readings arrived. The caller decides whether the readings are enough."""
+    readings = []
+    start = now()
+    while now() - start < seconds or (
+        len(readings) < IMU_MIN_SAMPLES and now() - start < seconds * SAMPLE_TIME_EXTENSION
+    ):
+        ctx.check()
+        reading = read()
+        if reading is not None:
+            readings.append(reading)
+        ctx.sleep(SENSOR_SAMPLE_SPACING)
+    return readings
 
 # how often the calibrations check for progress
 CALIBRATION_POLL_SECONDS = 0.2

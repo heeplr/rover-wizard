@@ -51,6 +51,7 @@ from .util.probing import (
     IMU_MIN_SAMPLES,
     MIN_ORIENTATION_CONFIDENCE,
     SENSOR_SAMPLE_SPACING,
+    collect_still_readings,
     restore_on_failure,
 )
 
@@ -72,15 +73,13 @@ DEGREES_E7 = 1e7
 
 def _average_compass(ctx, seconds: float = COMPASS_AVERAGING_SECONDS) -> tuple:
     """Mean RAW_IMU magnetic field (x, y, z) [mGauss] of the first compass over a still period."""
-    readings = []
-    start = now()
-    while now() - start < seconds:
-        ctx.check()
-        imu = ctx.vehicle.latest("RAW_IMU", max_age=1.0)
-        if imu is not None:
-            readings.append((imu.xmag, imu.ymag, imu.zmag))
-        ctx.sleep(SENSOR_SAMPLE_SPACING)
 
+    def read():
+        """The latest field, if fresh."""
+        imu = ctx.vehicle.latest("RAW_IMU", max_age=1.0)
+        return None if imu is None else (imu.xmag, imu.ymag, imu.zmag)
+
+    readings = collect_still_readings(ctx, read, seconds)
     if len(readings) < IMU_MIN_SAMPLES:
         raise VehicleError("No RAW_IMU compass telemetry - is the compass enabled and working?")
 

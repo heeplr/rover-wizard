@@ -5,8 +5,7 @@ from __future__ import annotations
 from ..util.errors import VehicleError
 from ..mavlink_defs import MILLI_G_PER_G
 from ..util.rotation import ORIENTATION_CHOICES, best_matching_rotation, gravity_direction_from_accelerometer
-from ..util.timebase import now
-from .util.probing import IMU_MIN_SAMPLES, MIN_ORIENTATION_CONFIDENCE, SENSOR_SAMPLE_SPACING, restore_on_failure
+from .util.probing import IMU_MIN_SAMPLES, MIN_ORIENTATION_CONFIDENCE, collect_still_readings, restore_on_failure
 from .util.actions import action_reboot_flight_controller
 from ..model import Action, Step, param_field
 
@@ -15,24 +14,18 @@ IMU_AVERAGING_SECONDS = 1.5
 
 def _average_accelerometer(ctx, seconds: float = IMU_AVERAGING_SECONDS) -> tuple:
     """Mean SCALED_IMU acceleration (x, y, z) in g over a short still period (averaging removes vibration noise)."""
-    x_values = []
-    y_values = []
-    z_values = []
-    start = now()
-    while now() - start < seconds:
-        ctx.check()
-        imu = ctx.vehicle.latest("SCALED_IMU", max_age=1.0)
-        if imu is not None:
-            x_values.append(imu.xacc)
-            y_values.append(imu.yacc)
-            z_values.append(imu.zacc)
-        ctx.sleep(SENSOR_SAMPLE_SPACING)
 
-    if len(x_values) < IMU_MIN_SAMPLES:
+    def read():
+        """The latest acceleration, if fresh."""
+        imu = ctx.vehicle.latest("SCALED_IMU", max_age=1.0)
+        return None if imu is None else (imu.xacc, imu.yacc, imu.zacc)
+
+    readings = collect_still_readings(ctx, read, seconds)
+    if len(readings) < IMU_MIN_SAMPLES:
         raise VehicleError("No SCALED_IMU telemetry - check the flight controller has an IMU and the link is stable.")
 
     # SCALED_IMU reports milli-g; convert the means to g.
-    return tuple(sum(values) / len(values) / MILLI_G_PER_G for values in (x_values, y_values, z_values))
+    return tuple(sum(reading[axis] for reading in readings) / len(readings) / MILLI_G_PER_G for axis in range(3))
 
 
 def action_probe_orientation(ctx):
