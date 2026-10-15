@@ -1,7 +1,7 @@
 # ArduPilot Rover Setup & Tuning Wizard
 
-[![Tests](https://github.com/heeplr/rover-wizard/actions/workflows/tests.yml/badge.svg)](https://github.com/heeplr/ardupilot-wizard/actions/workflows/tests.yml)
-[![Coverage](https://raw.githubusercontent.com/heeplr/rover-wizard/python-coverage-comment-action-data/badge.svg)](https://github.com/heeplr/ardupilot-wizard/tree/python-coverage-comment-action-data)
+[![Tests](https://github.com/heeplr/rover-wizard/actions/workflows/tests.yml/badge.svg)](https://github.com/heeplr/rover-wizard/actions/workflows/tests.yml)
+[![Coverage](https://raw.githubusercontent.com/heeplr/rover-wizard/python-coverage-comment-action-data/badge.svg)](https://github.com/heeplr/rover-wizard/tree/python-coverage-comment-action-data)
 
 ![rover-wizard main screenshot](screenshots/main_screen.jpg)
 
