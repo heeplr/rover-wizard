@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..util import timebase
 from ..util.errors import VehicleError
 from ..util.values import format_value
 from .util.probing import LIVE_DISPLAY_SECONDS
@@ -40,6 +41,10 @@ DEFAULT_ROLL_DISTANCE_M = 5.0
 
 # let the last encoder counts arrive before reading
 ENCODER_SETTLE_SECONDS = 0.4
+# a WHEEL_DISTANCE sent after the settle time must arrive within this long (the link may deliver it late) ...
+WHEEL_DISTANCE_WAIT_SECONDS = 5
+# ... checked this often
+WHEEL_DISTANCE_POLL_SECONDS = 0.05
 # WHEEL_DISTANCE older than this means the encoders are not reporting
 WHEEL_TELEMETRY_FRESH_SECONDS = 2
 
@@ -48,6 +53,19 @@ def _wheel_distances(ctx) -> list:
     """Distance [m] each wheel encoder has counted so far (from the latest WHEEL_DISTANCE)."""
     message = ctx.vehicle.latest("WHEEL_DISTANCE")
     return list(message.distance)[: int(message.count)]
+
+
+def _settled_wheel_distances(ctx) -> list:
+    """Distances [m] once the encoders' last counts have arrived: from a WHEEL_DISTANCE received at least
+    ENCODER_SETTLE_SECONDS after now (an older one may still miss the end of the movement)."""
+    settled = timebase.now() + ENCODER_SETTLE_SECONDS
+    ctx.sleep(ENCODER_SETTLE_SECONDS)
+    # age <= time since `settled`: the latest message arrived after it
+    while ctx.vehicle.age("WHEEL_DISTANCE") > timebase.now() - settled:
+        if timebase.now() - settled > WHEEL_DISTANCE_WAIT_SECONDS:
+            raise VehicleError("WHEEL_DISTANCE telemetry stopped - check the connection, then repeat.")
+        ctx.sleep(WHEEL_DISTANCE_POLL_SECONDS)
+    return _wheel_distances(ctx)
 
 
 def action_show_live_wheel_encoder(ctx):
@@ -66,12 +84,9 @@ def action_calibrate_wheel_encoder(ctx):
     if ctx.vehicle.age("WHEEL_DISTANCE") > WHEEL_TELEMETRY_FRESH_SECONDS:
         raise VehicleError("No WHEEL_DISTANCE telemetry: set WENC_TYPE, reboot and check the wiring/pins first.")
     ctx.pause("Mark a start line and place the vehicle on it, then press Continue.")
-    # let a fresh telemetry sample arrive
-    ctx.sleep(ENCODER_SETTLE_SECONDS)
-    before = _wheel_distances(ctx)
+    before = _settled_wheel_distances(ctx)
     ctx.pause(f"Roll the vehicle by hand exactly {rolled:g} m FORWARD in a straight line, then press Continue.")
-    ctx.sleep(ENCODER_SETTLE_SECONDS)
-    after = _wheel_distances(ctx)
+    after = _settled_wheel_distances(ctx)
     for index, (start, end) in enumerate(zip(before, after)):
         name = "WENC_RADIUS" if index == 0 else f"WENC{index + 1}_RADIUS"
         reported = end - start
