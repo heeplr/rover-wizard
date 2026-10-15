@@ -20,7 +20,7 @@ from util.fake_autopilot import RC_CHANNEL_COUNT, FakeAutopilot  # noqa: E402
 
 PORTS = itertools.count(14610)
 # util.helpers fast-forwards the wizard's clock this much for the simulator
-TEST_TIME_SCALE = 20.0
+TEST_TIME_SCALE = 10.0
 
 
 @pytest.fixture(autouse=True)
