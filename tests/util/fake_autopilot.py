@@ -6,6 +6,7 @@ and records every message the wizard sends so tests can check what actually went
 """
 
 import os
+import socket
 import threading
 import time
 
@@ -45,6 +46,20 @@ def default_parameters() -> dict:
     return params
 
 
+def _send_from_own_port(link) -> None:
+    """Give pymavlink's udpout connection a socket on a free port of its own.
+
+    On Windows pymavlink binds it to the destination port itself (0.0.0.0:<wizard's port>). The wizard's udpin socket
+    (127.0.0.1:<same port>, SO_REUSEADDR) then shares that port, and Windows delivers the wizard's answers - sent to
+    127.0.0.1:<that port> - to the more specific socket: the wizard's own. This fake would never hear a request.
+    """
+    link.port.close()
+    link.port = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    link.port.bind(("127.0.0.1", 0))
+    link.port.setblocking(False)
+    link.fd = link.port.fileno()
+
+
 class FakeAutopilot:
     """Runs in background threads; `received` lists every message from the wizard (newest last)."""
 
@@ -53,6 +68,7 @@ class FakeAutopilot:
         self.link = mavutil.mavlink_connection(
             f"udpout:127.0.0.1:{port}", source_system=SYSTEM_ID, source_component=COMPONENT_ID
         )
+        _send_from_own_port(self.link)
         self.params = default_parameters()
         # renamed: {old name: (new name, value)} - e.g. a newer firmware's parameter names
         for old, (new, value) in (renamed or {}).items():
@@ -151,6 +167,9 @@ class FakeAutopilot:
         while self._running:
             try:
                 message = self.link.recv_match(blocking=True, timeout=0.2)
+            except ConnectionResetError:
+                # Windows: "port unreachable" for a message sent before the wizard listened - nothing lost here
+                continue
             except OSError:
                 return
             if message is None or message.get_type() == "BAD_DATA":
