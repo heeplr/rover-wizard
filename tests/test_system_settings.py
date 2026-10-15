@@ -232,7 +232,7 @@ def test_scripting_enable_then_settings_after_reboot(wizard):
     ctx.set_field_value("SCR_ENABLE", 1)
     apply(ctx, "scripting")
     assert vehicle.get("SCR_ENABLE") == 1 and "SCR_HEAP_SIZE" not in visible(ctx, "scripting")
-    assert act(ctx, "save", "Reboot")
+    vehicle.reboot()
     enter(ctx, "scripting")
     assert {"SCR_HEAP_SIZE", "scr_dir_2", "SCR_USER6"} <= visible(ctx, "scripting")
     # don't run scripts from the SD card
