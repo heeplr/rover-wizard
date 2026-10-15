@@ -34,6 +34,8 @@ include = ["rover_wizard*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
+# a test running longer than this dumps every thread's stack (also on Windows), so a CI hang shows where it is
+faulthandler_timeout = 360
 
 [tool.black]
 line-length = 120
