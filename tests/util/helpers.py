@@ -10,8 +10,8 @@ from rover_wizard.vehicle.simulator import SimVehicle
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.session.store import Store
 
-# simulated time runs 10x faster than real time
-TEST_TIME_SCALE = 10.0
+# simulated time runs 20x faster than real time
+TEST_TIME_SCALE = 20.0
 timebase.set_time_scale(TEST_TIME_SCALE)
 
 BY_ID = {step.id: step for step in STEPS}

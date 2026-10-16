@@ -34,6 +34,8 @@ def real_time():
 
 
 SIZE = (180, 55)
+# the fake autopilot of the connect-screen test (test_mavlink_link.py uses 14610 and up)
+UI_FAKE_AUTOPILOT_PORT = 14590
 INDEX = {step.id: position for position, step in enumerate(STEPS)}
 # set it to a folder to keep text screenshots
 SCREENSHOT_DIR = os.environ.get("ROVER_WIZARD_SCREENSHOTS")
@@ -576,6 +578,163 @@ async def backup_restore_scenario():
         vehicle.disconnect()
 
 
+async def connect_screen_scenario(tmp_path):
+    """The connect screen: a connection string is required, its help opens and closes, a failed connection is
+    reported and can be retried - then a real MAVLink connection (to the fake autopilot) opens the wizard."""
+    pytest.importorskip("pymavlink")
+    from util.fake_autopilot import FakeAutopilot
+
+    app = WizardApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await until(pilot, lambda: type(app.screen).__name__ == "ConnectScreen")
+        screen = app.screen
+        go = screen.query_one("#c-go", Button)
+
+        def status():
+            """The line under the Connect button."""
+            return str(screen.query_one("#c-status").render())
+
+        await click(pilot, go)
+        check("a connection string is required", "Please enter a connection string." in status(), status())
+        await click(pilot, screen.query_one("#help-conn"))
+        opened = await until(pilot, lambda: type(app.screen).__name__ == "HelpScreen")
+        await click(pilot, app.screen.query_one("#help-close"))
+        closed = await until(pilot, lambda: app.screen is screen)
+        check("the connection help opens and closes", opened and closed)
+
+        screen.query_one("#c-conn").value = str(tmp_path / "no_such_serial_port")
+        screen.query_one("#c-baud").value = "not a number"
+        await click(pilot, go)
+        failed = await until(pilot, lambda: "Connection failed" in status() and not go.disabled)
+        check("a failed connection is reported and can be retried", failed, status())
+
+        autopilot = FakeAutopilot(UI_FAKE_AUTOPILOT_PORT)
+        try:
+            screen.query_one("#c-conn").value = f"udpin:127.0.0.1:{UI_FAKE_AUTOPILOT_PORT}"
+            await click(pilot, go)
+            main_screen, ctx, vehicle = await start(pilot, app)
+            check("a real connection opens the wizard", "ArduPilot Rover 4.5.7" in ctx.values.get("vehicle_info", ""))
+            check("the parameters were downloaded", vehicle.parameter_count == len(autopilot.params))
+        finally:
+            app.ctx and app.ctx.vehicle.disconnect()
+            autopilot.close()
+
+
+async def main_buttons_scenario():
+    """Arm (after a question), Disarm, Skip, Cancel and the arming requirement of actions."""
+    app = WizardApp(demo=True)
+    async with app.run_test(size=SIZE) as pilot:
+        screen, ctx, vehicle = await start(pilot, app)
+
+        def log_text():
+            """The activity log, as text."""
+            return " ".join(" ".join(strip.text for strip in screen.query_one("#log").lines).split())
+
+        await screen.show_step(INDEX["accel"])
+        await pilot.pause(0.3)
+        await click(pilot, screen.query_one("#b-arm", Button))
+        await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
+        await click(pilot, app.screen.query_one("#no"))
+        await pilot.pause(0.3)
+        check("No leaves the vehicle disarmed", not vehicle.armed)
+        await click(pilot, screen.query_one("#b-arm", Button))
+        await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
+        await click(pilot, app.screen.query_one("#yes"))
+        check("Yes arms the vehicle", await until(pilot, lambda: vehicle.armed))
+
+        row = next(
+            r for r in screen.query(".arow") if any(label_text(b) == "Gyro calibration" for b in r.query(Button))
+        )
+        await click(pilot, next(b for b in row.query(Button) if label_text(b) == "Gyro calibration"))
+        refused = await until(pilot, lambda: "needs a DISARMED vehicle" in log_text())
+        check("a bench action is refused while armed", refused, log_text()[-300:])
+
+        await click(pilot, screen.query_one("#b-disarm", Button))
+        check("Disarm disarms", await until(pilot, lambda: not vehicle.armed))
+
+        await screen.show_step(INDEX["verify"])
+        await pilot.pause(0.3)
+        row = next(
+            r for r in screen.query(".arow") if any("SPEED controller" in label_text(b) for b in r.query(Button))
+        )
+        await click(pilot, next(b for b in row.query(Button) if "SPEED controller" in label_text(b)))
+        refused = await until(pilot, lambda: "needs an ARMED vehicle" in log_text())
+        check("a driving action is refused while disarmed", refused, log_text()[-300:])
+
+        await click(pilot, screen.query_one("#b-cancel", Button))
+        check("Cancel is acknowledged", await until(pilot, lambda: "Cancel requested" in log_text()))
+
+        step_id = STEPS[screen.step_index].id
+        await click(pilot, screen.query_one("#b-skip", Button))
+        moved = await until(pilot, lambda: STEPS[screen.step_index].id != step_id)
+        check(
+            "Skip marks the step skipped and opens the next one", moved and ctx.store.step_status(step_id) == "skipped"
+        )
+
+        await screen.show_step(len(STEPS) - 1)
+        await pilot.pause(0.3)
+        await click(pilot, screen.query_one("#b-next", Button))
+        last = await until(pilot, lambda: "That was the last step" in log_text())
+        check("Next on the last step says so", last, log_text()[-300:])
+        vehicle.disconnect()
+
+
+async def parameter_dialogs_scenario(tmp_path):
+    """The edge cases of the parameter list's dialogs: a read-only parameter, Cancel, a file that doesn't exist or
+    can't be read, and a file that matches the vehicle."""
+    app = WizardApp(demo=True)
+    async with app.run_test(size=SIZE) as pilot:
+        screen, ctx, vehicle = await start(pilot, app)
+        await pilot.press("ctrl+p")
+        await until(pilot, lambda: type(app.screen).__name__ == "ParameterScreen")
+        params = app.screen
+        table = params.query_one("#p-table")
+
+        def status():
+            """The line under the list."""
+            return str(params.query_one("#p-status").render())
+
+        params.query_one("#p-search").value = "INS_ACC_ID"
+        await until(pilot, lambda: table.row_count == 1)
+        table.focus()
+        await pilot.press("enter")
+        await until(pilot, lambda: type(app.screen).__name__ == "ParameterEditScreen")
+        dialog = app.screen
+        text = " ".join(screen_text(app).split())
+        check(
+            "a read-only parameter can't be saved",
+            dialog.query_one("#pe-save").disabled and "Read-only" in text,
+            text[:500],
+        )
+        await click(pilot, dialog.query_one("#pe-cancel"))
+        check("Cancel closes the editor", await until(pilot, lambda: app.screen is params))
+
+        async def restore(path):
+            """Open Restore and submit `path`."""
+            await click(pilot, params.query_one("#p-restore"))
+            await until(pilot, lambda: type(app.screen).__name__ == "RestoreScreen")
+            app.screen.query_one("#pr-path").value = str(path)
+            await click(pilot, app.screen.query_one("#pr-restore"))
+            await pilot.pause(0.3)
+
+        await restore(tmp_path / "missing.param")
+        error = str(app.screen.query_one("#pr-error").render())
+        check("a missing file is refused in the dialog", "No such file" in error, error)
+        await click(pilot, app.screen.query_one("#pr-cancel"))
+        check("Cancel closes the restore dialog", await until(pilot, lambda: app.screen is params))
+
+        broken = tmp_path / "broken.param"
+        broken.write_text("this is not a parameter file\n", encoding="utf-8")
+        await restore(broken)
+        check("an unreadable file is reported", "broken.param: Line 1" in status(), status())
+
+        same = tmp_path / "same.param"
+        same.write_text(f"CRUISE_SPEED,{vehicle.get('CRUISE_SPEED')}\n", encoding="utf-8")
+        await restore(same)
+        check("a file matching the vehicle writes nothing", "Nothing to write" in status(), status())
+        vehicle.disconnect()
+
+
 async def hidden_parameters_scenario():
     """A step's note about settings missing on this firmware names each one's parameter."""
     app = WizardApp(demo=True)
@@ -737,6 +896,18 @@ def test_parameter_list():
 
 def test_backup_and_restore():
     asyncio.run(backup_restore_scenario())
+
+
+def test_connect_screen(tmp_path):
+    asyncio.run(connect_screen_scenario(tmp_path))
+
+
+def test_main_screen_buttons():
+    asyncio.run(main_buttons_scenario())
+
+
+def test_parameter_dialogs(tmp_path):
+    asyncio.run(parameter_dialogs_scenario(tmp_path))
 
 
 def test_hidden_parameters_are_named():

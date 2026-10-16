@@ -14,13 +14,21 @@ from rover_wizard.util.errors import VehicleError  # noqa: E402
 from rover_wizard.ardupilot_defs import MODES  # noqa: E402
 from rover_wizard.mavlink_defs import GUIDED_VELOCITY_YAW_RATE_TYPEMASK  # noqa: E402
 from rover_wizard.session.store import Store  # noqa: E402
-from rover_wizard.vehicle.link import STREAMS, Vehicle, _as_float32, _param_file_value  # noqa: E402
+from rover_wizard.vehicle.link import (  # noqa: E402
+    INBOX_ACCEL_CALIBRATION,
+    INBOX_MAG_CAL_PROGRESS,
+    PARAM_SET_ATTEMPTS,
+    STREAMS,
+    Vehicle,
+    _as_float32,
+    _param_file_value,
+)
 
 from util.fake_autopilot import RC_CHANNEL_COUNT, FakeAutopilot  # noqa: E402
 
 PORTS = itertools.count(14610)
 # util.helpers fast-forwards the wizard's clock this much for the simulator
-TEST_TIME_SCALE = 10.0
+TEST_TIME_SCALE = 20.0
 
 
 @pytest.fixture(autouse=True)
@@ -293,6 +301,103 @@ def test_other_components_of_the_vehicle_do_not_mix_in(link):
     assert autopilot.wait_for(lambda: "Gimbal ready" in vehicle.status_texts_since(0), timeout=5)
     assert not vehicle.has_parameter("GMB_OWN_PARAM")
     assert not vehicle.armed and vehicle.custom_mode != 99
+
+
+def test_a_new_text_before_the_last_piece_of_the_previous_one(link):
+    vehicle, autopilot = link
+    marker = vehicle.status_text_marker()
+    sender = _sender(autopilot, vehicle.component_id)
+    # text 11 loses its last piece; text 12 follows in one message
+    sender.statustext_send(4, b"y" * 50, id=11, chunk_seq=0)
+    sender.statustext_send(4, b"PreArm: next text", id=12, chunk_seq=0)
+    assert autopilot.wait_for(lambda: vehicle.status_texts_since(marker) == ["y" * 50, "PreArm: next text"], timeout=5)
+
+
+def test_messages_from_another_vehicle_are_ignored(link):
+    vehicle, autopilot = link
+    other = mavlink.MAVLink(autopilot.link, srcSystem=2, srcComponent=1)
+    other.heartbeat_send(
+        mavlink.MAV_TYPE_GROUND_ROVER,
+        mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+        mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
+        99,
+        mavlink.MAV_STATE_ACTIVE,
+    )
+    other.statustext_send(6, b"I am vehicle 2")
+    # a message of our vehicle sent afterwards: when it has arrived, the other ones have been handled
+    _sender(autopilot, vehicle.component_id).statustext_send(6, b"I am vehicle 1")
+    assert autopilot.wait_for(lambda: "I am vehicle 1" in vehicle.status_texts_since(0), timeout=5)
+    assert "I am vehicle 2" not in vehicle.status_texts_since(0)
+    assert not vehicle.armed and vehicle.custom_mode != 99
+
+
+def test_calibration_requests_and_progress_go_to_their_inboxes(link):
+    vehicle, autopilot = link
+    sender = _sender(autopilot, vehicle.component_id)
+    # the accelerometer calibration asks for position 3 (on its right side)
+    sender.command_long_send(255, 0, mavlink.MAV_CMD_ACCELCAL_VEHICLE_POS, 0, 3, 0, 0, 0, 0, 0, 0)
+    sender.mag_cal_progress_send(0, 1, mavlink.MAG_CAL_RUNNING_STEP_TWO, 1, 40, [0] * 10, 0, 0, 0)
+    assert autopilot.wait_for(lambda: vehicle._inbox[INBOX_MAG_CAL_PROGRESS], timeout=5)
+    assert vehicle.pop_inbox(INBOX_ACCEL_CALIBRATION) == 3
+    assert vehicle.pop_inbox(INBOX_MAG_CAL_PROGRESS).completion_pct == 40
+
+
+def test_parameters_lost_from_the_list_are_asked_for_one_by_one(link):
+    vehicle, autopilot = link
+    lost = set(range(3, 6))
+    autopilot.lost_from_list = {autopilot.names[index] for index in lost}
+    progress = []
+    vehicle.fetch_params(progress=lambda received, total: progress.append((received, total)), timeout=20)
+    assert vehicle.parameter_count == len(autopilot.names) and vehicle.parameter_download_warning() == ""
+    assert lost <= {message.param_index for message in autopilot.messages("PARAM_REQUEST_READ")}
+    assert progress[-1] == (len(autopilot.names), len(autopilot.names))
+
+
+def test_no_parameters_at_all_is_an_error(link):
+    vehicle, autopilot = link
+    autopilot.withheld = set(autopilot.names)
+    with pytest.raises(VehicleError, match="Could not download the parameter list"):
+        vehicle.fetch_params(timeout=1.0)
+
+
+# the next tests wait for answers that never come: a faster clock keeps them short (the fake's telemetry period of
+# 100 ms real time is then 1 s - still fresh for the link)
+FAST_TIME_SCALE = 10.0
+
+
+def test_unconfirmed_parameter_write_is_an_error(link):
+    vehicle, autopilot = link
+    timebase.set_time_scale(FAST_TIME_SCALE)
+    autopilot.withheld = {"CRUISE_SPEED"}
+    with pytest.raises(VehicleError, match="No confirmation from the vehicle when setting CRUISE_SPEED"):
+        vehicle.set_param("CRUISE_SPEED", 3.0)
+    assert len([m for m in autopilot.messages("PARAM_SET") if m.param_id == "CRUISE_SPEED"]) == PARAM_SET_ATTEMPTS
+
+
+def test_refused_arming_names_the_pre_arm_reason(link):
+    vehicle, autopilot = link
+    timebase.set_time_scale(FAST_TIME_SCALE)
+    autopilot.refused_commands[mavlink.MAV_CMD_COMPONENT_ARM_DISARM] = "PreArm: Throttle below failsafe"
+    with pytest.raises(VehicleError, match="Arming refused. FC says: PreArm: Throttle below failsafe"):
+        vehicle.arm()
+    assert not vehicle.armed
+
+
+def test_refused_mode_change_names_the_reason(link):
+    vehicle, autopilot = link
+    timebase.set_time_scale(FAST_TIME_SCALE)
+    autopilot.refused_commands[mavlink.MAV_CMD_DO_SET_MODE] = "Mode change to GUIDED failed: requires position"
+    with pytest.raises(VehicleError, match="Could not switch to GUIDED mode. FC says: Mode change to GUIDED failed"):
+        vehicle.set_mode("GUIDED")
+
+
+def test_version_from_the_banner_when_autopilot_version_is_not_sent(link):
+    vehicle, autopilot = link
+    timebase.set_time_scale(FAST_TIME_SCALE)
+    # old firmware: no AUTOPILOT_VERSION on request, but the boot banner names the version
+    autopilot.refused_commands[mavlink.MAV_CMD_REQUEST_MESSAGE] = "ArduRover V4.2.3 (2172cfb3)"
+    vehicle.read_version()
+    assert vehicle.version == (4, 2, 3) and vehicle.version_str() == "4.2.3"
 
 
 # ---- parameter backup (.param file) -----------------------------------------------------------------------------------

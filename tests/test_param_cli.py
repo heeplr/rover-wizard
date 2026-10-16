@@ -21,7 +21,7 @@ from util.fake_autopilot import FakeAutopilot  # noqa: E402
 from util.helpers import make  # noqa: E402
 
 # util.helpers fast-forwards the simulated time this much
-TEST_TIME_SCALE = 10.0
+TEST_TIME_SCALE = 20.0
 
 PORTS = itertools.count(14710)
 

@@ -145,3 +145,28 @@ def test_compensation_goes_to_the_compass_used_first(wizard):
     vehicle._params.update(COMPASS_DEV_ID2=12345, COMPASS_PRIO1_ID=12345)
     field = next(field for field in BY_ID["compass"].fields if field.key == "mot_x")
     assert primary_compass_slot(ctx) == 2 and field.names(ctx) == ("COMPASS_MOT2_X",)
+
+
+@pytest.mark.parametrize("power", ["5", "101"])
+def test_motor_power_outside_the_allowed_range_is_refused(wizard, power):
+    vehicle, ctx, log = wizard
+    ctx.set_field_value("compassmot_power", power)
+    with pytest.raises(Exception, match="Motor power must be"):
+        action_measure_compass_motor_interference(ctx)
+    assert not vehicle.motor_tests
+
+
+def test_unassigned_motor_output_is_refused(wizard):
+    vehicle, ctx, log = wizard
+    vehicle.set_param("SERVO3_FUNCTION", 0)
+    with pytest.raises(Exception, match="Assign the motor output"):
+        action_measure_compass_motor_interference(ctx)
+    assert not vehicle.motor_tests
+
+
+def test_no_current_sensor_is_refused(wizard):
+    vehicle, ctx, log = wizard
+    vehicle.reports_current = False
+    assert wait_until(lambda: vehicle.latest("SYS_STATUS").current_battery == -1)
+    with pytest.raises(Exception, match="needs a current sensor"):
+        action_measure_compass_motor_interference(ctx)

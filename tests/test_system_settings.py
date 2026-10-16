@@ -320,3 +320,45 @@ def docs_bitmask(name):
 
     with open(DOCS_FILE, encoding="utf-8") as handle:
         return json.load(handle)[name]["bitmask"]
+
+
+def test_compass_probe_not_started(wizard):
+    vehicle, ctx = wizard
+    log = []
+    ctx.set_output(log=log.append, on_wait=lambda waiting: None, on_values_changed=lambda: None)
+    ctx.confirm = lambda message: False
+    enter(ctx, "compass")
+    action_probe_compass_orientation(ctx)
+    assert log[-1] == "Cancelled - no changes made." and ctx.changes.items() == []
+
+
+def test_compass_probe_result_discarded_restores_the_orientation(monkeypatch):
+    monkeypatch.setattr(SimVehicle, "TRUE_COMPASS_ORIENTATION", "Yaw90")
+    vehicle, ctx = make()
+    try:
+        vehicle.set_param("COMPASS_ORIENT", 4)
+        # start: yes - keep the result: no
+        answers = iter([True, False])
+        ctx.confirm = lambda message: next(answers)
+        ctx.pause = heading_following_pause(ctx, vehicle)
+        enter(ctx, "compass")
+        action_probe_compass_orientation(ctx)
+        assert vehicle.get("COMPASS_ORIENT") == 4
+    finally:
+        vehicle.disconnect()
+
+
+def test_compass_probe_near_the_magnetic_equator_is_refused(monkeypatch):
+    # an almost horizontal field: facing north and south can't tell up from down
+    monkeypatch.setattr(SimVehicle, "EARTH_FIELD_DOWN", 5.0)
+    vehicle, ctx = make()
+    try:
+        vehicle.set_param("COMPASS_ORIENT", 4)
+        ctx.confirm = lambda message: True
+        ctx.pause = heading_following_pause(ctx, vehicle)
+        enter(ctx, "compass")
+        with pytest.raises(VehicleError, match="near the magnetic equator"):
+            action_probe_compass_orientation(ctx)
+        assert vehicle.get("COMPASS_ORIENT") == 4, "the original orientation is restored"
+    finally:
+        vehicle.disconnect()

@@ -91,6 +91,31 @@ def test_a_channel_that_does_not_move_with_its_stick_gets_no_direction(wizard):
     assert vehicle.get("RC1_REVERSED") == 0
 
 
+def test_no_receiver_is_reported_before_any_question(wizard, monkeypatch):
+    vehicle, ctx, log = wizard
+    monkeypatch.setattr(vehicle, "rc_raw", lambda: None)
+    ctx.pause = lambda message, during=None: pytest.fail("no question without a receiver")
+    enter(ctx, "rc")
+    with pytest.raises(VehicleError, match="No RC_CHANNELS telemetry"):
+        BY_ID["rc"].actions[0].fn(ctx)
+
+
+def test_sticks_that_never_move_are_reported(wizard):
+    vehicle, ctx, log = wizard
+
+    def pause(message, during=None):
+        """A pilot who doesn't touch the transmitter."""
+        vehicle.raw_rc_override = [CENTRE_PWM] * 16
+        if during:
+            during()
+
+    ctx.pause = pause
+    enter(ctx, "rc")
+    assert act(ctx, "rc", "Calibrate radio")
+    assert any("didn't move with the THROTTLE stick" in line and "No channel moved" in line for line in log)
+    assert any("didn't move with the STEERING stick" in line for line in log)
+
+
 def test_mode_switch_on_a_control_channel_is_refused(wizard):
     vehicle, ctx, log = wizard
     enter(ctx, "rc")

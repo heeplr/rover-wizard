@@ -78,6 +78,10 @@ class FakeAutopilot:
         self.param_errors = param_errors
         # parameters it never sends (a lossy link), so a download stays incomplete
         self.withheld = set()
+        # parameters lost from the full list only: sent when asked for one by one
+        self.lost_from_list = set()
+        # command id -> STATUSTEXT sent before refusing it (MAV_RESULT_FAILED, no side effect)
+        self.refused_commands: dict = {}
         self.armed = False
         # HOLD
         self.custom_mode = 4
@@ -179,7 +183,8 @@ class FakeAutopilot:
             msg_type = message.get_type()
             if msg_type == "PARAM_REQUEST_LIST":
                 for name in self.names:
-                    self._send_param(name)
+                    if name not in self.lost_from_list:
+                        self._send_param(name)
             elif msg_type == "PARAM_REQUEST_READ":
                 if message.param_index == -1:
                     # by name, like GCS_MAVLINK::param_io_timer
@@ -204,6 +209,12 @@ class FakeAutopilot:
 
     def _handle_command(self, message) -> None:
         """Acknowledge a command, with ArduPilot's side effects for the ones the wizard relies on."""
+        if message.command in self.refused_commands:
+            self.link.mav.statustext_send(
+                mavlink.MAV_SEVERITY_CRITICAL, self.refused_commands[message.command].encode()
+            )
+            self.link.mav.command_ack_send(message.command, mavlink.MAV_RESULT_FAILED)
+            return
         if (
             message.command == mavlink.MAV_CMD_REQUEST_MESSAGE
             and int(message.param1) == mavlink.MAVLINK_MSG_ID_AUTOPILOT_VERSION

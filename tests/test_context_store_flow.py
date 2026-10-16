@@ -1,15 +1,19 @@
 """Pilot interaction, saved progress and step navigation."""
 
+import json
 import os
+import sys
 import tempfile
 import threading
+
+import pytest
 
 from rover_wizard.util.errors import Cancelled
 from rover_wizard.flow import StepFlow
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.session.store import STEP_DONE
 from rover_wizard.session.store import STEP_SKIPPED
-from rover_wizard.session.store import Store
+from rover_wizard.session.store import Store, default_root
 
 from util.helpers import check, make, wait_until
 
@@ -91,3 +95,50 @@ def test_a_file_of_the_wrong_shape_is_set_aside(tmp_path):
     store = Store(3, root=str(tmp_path))
     assert store.setting("runway") is None
     assert [path.name.startswith("vehicle_3.json.corrupt-") for path in tmp_path.iterdir()] == [True]
+
+
+def test_progress_survives_a_restart(tmp_path):
+    store = Store(5, root=str(tmp_path))
+    store.mark_step("vehicle_type", STEP_DONE)
+    store.update_settings(runway=35)
+    store.set("steer", "skid")
+    again = Store(5, root=str(tmp_path))
+    assert (again.step_status("vehicle_type"), again.setting("runway"), again.get("steer")) == (STEP_DONE, 35, "skid")
+    assert Store(6, root=str(tmp_path)).step_status("vehicle_type") is None, "another vehicle has its own progress"
+
+
+@pytest.mark.parametrize(
+    "settings, circle_d",
+    [
+        # the free area was saved as a radius
+        ({"arena": 12}, 24.0),
+        # a diameter saved later wins
+        ({"arena": 12, "circle_d": 30}, 30),
+        # unusable: dropped, the default applies
+        ({"arena": "wide"}, None),
+    ],
+)
+def test_old_free_area_radius_becomes_the_circle_diameter(tmp_path, settings, circle_d):
+    (tmp_path / "vehicle_4.json").write_text(json.dumps({"settings": settings}), encoding="utf-8")
+    store = Store(4, root=str(tmp_path))
+    assert store.setting("circle_d") == circle_d and store.setting("arena") is None
+
+
+@pytest.mark.parametrize(
+    "platform, environment, expected",
+    [
+        ("win32", {"LOCALAPPDATA": "C:/Users/pilot/AppData/Local"}, "C:/Users/pilot/AppData/Local"),
+        ("win32", {}, "~/AppData/Local"),
+        ("darwin", {}, "~/Library/Application Support"),
+        ("linux", {"XDG_DATA_HOME": "/data"}, "/data"),
+        # the XDG spec says to ignore a relative path
+        ("linux", {"XDG_DATA_HOME": "relative"}, "~/.local/share"),
+    ],
+)
+def test_data_folder_on_each_platform(monkeypatch, platform, environment, expected):
+    monkeypatch.setattr(sys, "platform", platform)
+    for variable in ("LOCALAPPDATA", "XDG_DATA_HOME"):
+        monkeypatch.delenv(variable, raising=False)
+    for variable, value in environment.items():
+        monkeypatch.setenv(variable, value)
+    assert default_root() == os.path.join(os.path.expanduser(expected), "rover-wizard")
