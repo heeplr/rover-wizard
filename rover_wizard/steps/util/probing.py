@@ -67,5 +67,6 @@ def collect_still_readings(ctx, read: Callable, seconds: float) -> list:
         ctx.sleep(SENSOR_SAMPLE_SPACING)
     return readings
 
+
 # how often the calibrations check for progress
 CALIBRATION_POLL_SECONDS = 0.2

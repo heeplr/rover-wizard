@@ -11,7 +11,9 @@ from . import __version__
 from .vehicle.link import DEFAULT_BAUD_RATE
 
 if TYPE_CHECKING:
+    # only for the annotation: importing it at run time would load Textual, which the -p mode must not need
     from .ui.wizard_app import WizardApp
+
 
 def _is_missing(module: str) -> bool:
     """Whether an optional dependency is not installed (checked without importing it)."""
@@ -19,14 +21,14 @@ def _is_missing(module: str) -> bool:
 
 
 def app(conn="", baud=DEFAULT_BAUD_RATE, demo=False, demo_skid=False) -> WizardApp:
-    """Launch wizard UI; returns the textual app"""
+    """textual app factory"""
     from .ui.wizard_app import WizardApp
 
     return WizardApp(conn, baud, demo, demo_skid)
 
 
 def main(argv=None) -> int:
-    """Parse the command line and run the parameter mode (-p) or launch TUI"""
+    """Parse the command line and run the parameter mode (-p) or the wizard UI; returns the process exit code."""
     parser = argparse.ArgumentParser(
         prog="rover_wizard", description="ArduPilot Rover setup & tuning wizard (Textual UI)"
     )
