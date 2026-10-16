@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -124,21 +125,27 @@ def test_old_free_area_radius_becomes_the_circle_diameter(tmp_path, settings, ci
     assert store.setting("circle_d") == circle_d and store.setting("arena") is None
 
 
+# an absolute path on the machine running the tests (path rules are the host's, whatever sys.platform pretends)
+ABSOLUTE = "<absolute>"
+
+
 @pytest.mark.parametrize(
     "platform, environment, expected",
     [
-        ("win32", {"LOCALAPPDATA": "C:/Users/pilot/AppData/Local"}, "C:/Users/pilot/AppData/Local"),
+        ("win32", {"LOCALAPPDATA": ABSOLUTE}, ABSOLUTE),
         ("win32", {}, "~/AppData/Local"),
         ("darwin", {}, "~/Library/Application Support"),
-        ("linux", {"XDG_DATA_HOME": "/data"}, "/data"),
+        ("linux", {"XDG_DATA_HOME": ABSOLUTE}, ABSOLUTE),
         # the XDG spec says to ignore a relative path
         ("linux", {"XDG_DATA_HOME": "relative"}, "~/.local/share"),
     ],
 )
-def test_data_folder_on_each_platform(monkeypatch, platform, environment, expected):
+def test_data_folder_on_each_platform(monkeypatch, tmp_path, platform, environment, expected):
     monkeypatch.setattr(sys, "platform", platform)
     for variable in ("LOCALAPPDATA", "XDG_DATA_HOME"):
         monkeypatch.delenv(variable, raising=False)
     for variable, value in environment.items():
-        monkeypatch.setenv(variable, value)
-    assert default_root() == os.path.join(os.path.expanduser(expected), "rover-wizard")
+        monkeypatch.setenv(variable, str(tmp_path) if value == ABSOLUTE else value)
+    base = str(tmp_path) if expected == ABSOLUTE else os.path.expanduser(expected)
+    # compared with "/" only: the expectations are written with "/", the host joins with its own separator
+    assert Path(default_root()).as_posix() == Path(base, "rover-wizard").as_posix()
