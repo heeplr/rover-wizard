@@ -3,6 +3,7 @@ scripting, gripper and temperature sensors."""
 
 import pytest
 
+from rover_wizard.util import timebase
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.flow import StepFlow
 from rover_wizard.util.rotation import ORIENTATION_CHOICES
@@ -13,7 +14,7 @@ from rover_wizard.steps.compass import action_probe_compass_orientation
 from rover_wizard.steps.gps import action_probe_gps_type
 from rover_wizard.steps.failsafe import ARMING_CHECK_BITS
 
-from util.helpers import BY_ID, act, apply, enter, make
+from util.helpers import BY_ID, act, apply, enter, make, wait_until
 
 INDEX = {step.id: position for position, step in enumerate(STEPS)}
 ALL_LISTED_CHECKS = sum(bit for bit, _ in ARMING_CHECK_BITS)
@@ -117,6 +118,9 @@ def heading_following_pause(ctx, vehicle, cancel_at=None):
             vehicle.held_heading_deg = 0.0
         elif "SOUTH" in message:
             vehicle.held_heading_deg = 180.0
+        # like a pilot pressing Continue once the vehicle is turned: the compass already reports the new heading
+        turned = timebase.now()
+        wait_until(lambda: vehicle.age("RAW_IMU") < timebase.now() - turned)
 
     return pause
 

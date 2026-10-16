@@ -86,8 +86,12 @@ DEFAULT_STEERING_TEST_PERCENT = 25
 DEFAULT_MOTOR_TEST_PERCENT = 15
 # how often the steering hold checks whether it is due for release
 RELEASE_CHECK_SECONDS = 0.1
-# wait this long after a stick hold / motor test before reading the output's pulse
+# after a stick hold / motor test, read the output's pulse from a report received at least this much later ...
 OUTPUT_SETTLE_SECONDS = 0.5
+# ... waiting at most this long for one (then the latest report is shown) ...
+OUTPUT_REPORT_WAIT_SECONDS = 2.0
+# ... checked this often
+OUTPUT_REPORT_POLL_SECONDS = 0.05
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -401,8 +405,16 @@ class ServoTester:
         For steering and motor outputs the wizard sends a stick position or a motor-test percentage, not a pulse
         width; ArduPilot turns that into the pulse (MIN/TRIM/MAX, reversal, ...), so the reported value is shown.
         """
+        vehicle = self._ctx.vehicle
+        settled = timebase.now() + OUTPUT_SETTLE_SECONDS
         timebase.sleep(OUTPUT_SETTLE_SECONDS)
-        pulse = self._ctx.vehicle.servo_pulse(output)
+        # age <= time since `settled`: the latest report arrived after it (an earlier one may show the old pulse)
+        while (
+            vehicle.age("SERVO_OUTPUT_RAW") > timebase.now() - settled
+            and timebase.now() - settled < OUTPUT_REPORT_WAIT_SECONDS
+        ):
+            timebase.sleep(OUTPUT_REPORT_POLL_SECONDS)
+        pulse = vehicle.servo_pulse(output)
         return f"SERVO{output}: {pulse} us" if pulse else f"SERVO{output}: (output not reported)"
 
     # ------------------------------------------------------------------ MIN / TRIM / MAX buttons

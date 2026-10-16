@@ -61,7 +61,8 @@ DEADZONE_STEP_SECONDS = 2.0
 DEADZONE_TEST_OVERLAP = 1.0
 # how often the dead-zone ramp checks for Continue
 DEADZONE_POLL_SECONDS = 0.05
-# Each ramp step is logged this long after it started, once the output reports the new power.
+# Each ramp step is logged with the first output report received this long after the step started (an earlier
+# one may still show the previous power).
 DEADZONE_LOG_DELAY_SECONDS = 0.3
 
 # What the ESC / motor driver can do below neutral (saved as the 'esc_dir' setting).
@@ -193,8 +194,9 @@ def action_find_throttle_deadzone(ctx):
                 logged = False
                 while now() - step_start < DEADZONE_STEP_SECONDS and found is None:
                     ctx.check()
-                    # log every step
-                    if not logged and now() - step_start >= DEADZONE_LOG_DELAY_SECONDS:
+                    # log every step - with a report that arrived late enough to show this step's power
+                    reported_at = now() - ctx.vehicle.age("SERVO_OUTPUT_RAW")
+                    if not logged and reported_at >= step_start + DEADZONE_LOG_DELAY_SECONDS:
                         ctx.log(f"Motor power {percent}% - {_reported_motor_pulse(ctx, function)}")
                         logged = True
                     if ctx.was_continue_pressed():
@@ -203,6 +205,9 @@ def action_find_throttle_deadzone(ctx):
                     ctx.sleep(DEADZONE_POLL_SECONDS)
                 if found is not None:
                     break
+                if not logged:
+                    # no fresh report during the whole step
+                    ctx.log(f"Motor power {percent}% - output not reported")
     finally:
         ctx.end_wait()
         # stop the wheel now, not when the test lapses
