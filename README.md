@@ -85,7 +85,7 @@ attempt fails. The connection auto-recovers if it drops (e.g. a TCP link resets)
 3. Wrap-up - finalize setup
 
 Every phase consists of several setup steps. Navigate them in the treeview or using the "Back", "Next", or "Skip" buttons.
-Settings and measurements are stored in `~/.rover_wizard/vehicle_<sysid>.json`, so you can stop anytime and continue later.
+Settings and measurements are stored in a `vehicle_<sysid>.json`, so you can stop anytime and continue later.
 Every step where the vehicle moves lets you choose **automatic** (wizard drives) or **manual** (you drive, wizard records).
 
 ### Optional Hardware
