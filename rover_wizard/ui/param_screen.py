@@ -123,8 +123,10 @@ class RestoreScreen(ModalScreen):
             yield Static("Restore parameters: choose a backup or enter the path of a parameter file.")
             yield Select(
                 [(os.path.basename(path), path) for path in self.backups],
-                prompt="Backups in the wizard's data folder" if self.backups else "No backups yet",
-                value=self.backups[0] if self.backups else Select.BLANK,
+                prompt="No backups yet",
+                # with backups the newest is selected; without, the prompt shows (Select's "no selection" value
+                # is spelled differently across Textual versions: not named here)
+                allow_blank=not self.backups,
                 disabled=not self.backups,
                 id="pr-backups",
             )
@@ -136,7 +138,7 @@ class RestoreScreen(ModalScreen):
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """A backup chosen: its path goes into the field."""
-        if event.value != Select.BLANK:
+        if isinstance(event.value, str):
             self.query_one("#pr-path", Input).value = str(event.value)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
