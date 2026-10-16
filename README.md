@@ -98,13 +98,6 @@ Several settings have a **Probe** button for autoprobing.
 Press to try autoconfiguration. The "❓" button displays a help text describing what will be done and what to take care for.
 
 
-### Driving commander
-
-In probes during Phase 2, you can choose to drive maneuvers yourself (**manual**) while
-the wizard records or let the wizard command the vehicle (**automatic**).
-See help for details.
-
-
 ### Live panel
 Below the step list, there is a monitor section:
  * **RC channels** shows a bar for every channel your receiver delivers that is updated in realtime.
