@@ -140,7 +140,7 @@ headless with Textual's test pilot. Set `ROVER_WIZARD_SCREENSHOTS` to a folder t
 
 
 ## Disclaimer
-This is a vibecoding experiment designed & created by an LLM model using carefully written prompts ("You sure can hydrate a pizza, mom!").
+This is a vibecoding experiment designed & created by an LLM using carefully written prompts ("You sure can hydrate a pizza, mom!").
 Most of the code was read by a human and all changes (human or AI) are recorded in the git history.
 There's a [checklist](HUMAN_CHECKS.md) that lists, which functions haven't been tested by a human, yet.
 Please feel free to contribute if you tested something (un)successfully.
