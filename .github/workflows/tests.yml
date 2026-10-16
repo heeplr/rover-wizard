@@ -46,6 +46,10 @@ jobs:
       # python -m pytest: always the interpreter set up above (never a system-wide pytest).
       # GitHub sets CI=true, so tests/conftest.py fails instead of skipping when a dependency is missing.
       - name: Run the tests
+        env:
+          # macOS runners are often too busy for the simulator at the usual 20x: its telemetry then goes stale
+          # (tests/util/helpers.py). Slower simulated time leaves it more real time.
+          ROVER_WIZARD_TEST_TIME_SCALE: ${{ runner.os == 'macOS' && '5' || '20' }}
         run: python -m pytest -ra
 
   coverage:

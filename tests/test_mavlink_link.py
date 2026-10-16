@@ -25,10 +25,9 @@ from rover_wizard.vehicle.link import (  # noqa: E402
 )
 
 from util.fake_autopilot import RC_CHANNEL_COUNT, FakeAutopilot  # noqa: E402
+from util.helpers import TEST_TIME_SCALE  # noqa: E402
 
 PORTS = itertools.count(14610)
-# util.helpers fast-forwards the wizard's clock this much for the simulator
-TEST_TIME_SCALE = 20.0
 
 
 @pytest.fixture(autouse=True)

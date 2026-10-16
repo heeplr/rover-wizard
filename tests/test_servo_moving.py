@@ -44,7 +44,7 @@ def wizard():
 def slower_clock():
     """Simulated time at SLOWER_TIME_SCALE instead of the usual 20x: a test that compares two waits of a few
     seconds then has a margin a busy test machine (e.g. a CI runner) can't eat up."""
-    timebase.set_time_scale(SLOWER_TIME_SCALE)
+    timebase.set_time_scale(min(SLOWER_TIME_SCALE, TEST_TIME_SCALE))
     yield
     timebase.set_time_scale(TEST_TIME_SCALE)
 

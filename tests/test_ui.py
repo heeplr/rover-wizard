@@ -21,7 +21,7 @@ from rover_wizard.ui.wizard_app import WizardApp  # noqa: E402
 from rover_wizard.motion.servo_test import DEFAULT_STEERING_TEST_PERCENT  # noqa: E402
 from rover_wizard.ui.modals import ConfirmScreen, LeaveStepScreen, ProbeScreen  # noqa: E402
 
-from util.helpers import check  # noqa: E402
+from util.helpers import TEST_TIME_SCALE, check  # noqa: E402
 from util.screen_text import svg_to_text  # noqa: E402
 
 
@@ -30,7 +30,7 @@ def real_time():
     """The UI runs in real time like the real app (other tests fast-forward the simulator 20x)."""
     timebase.set_time_scale(1.0)
     yield
-    timebase.set_time_scale(20.0)
+    timebase.set_time_scale(TEST_TIME_SCALE)
 
 
 SIZE = (180, 55)

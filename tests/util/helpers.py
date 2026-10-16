@@ -1,5 +1,6 @@
 """Shared helpers for the wizard's tests: a simulated vehicle + wizard context, and step/action shortcuts."""
 
+import os
 import tempfile
 import time
 
@@ -10,8 +11,10 @@ from rover_wizard.vehicle.simulator import SimVehicle
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.session.store import Store
 
-# simulated time runs 20x faster than real time
-TEST_TIME_SCALE = 20.0
+# simulated time runs this many times faster than real time. A slow or busy machine (e.g. a CI runner) can lower it
+# with ROVER_WIZARD_TEST_TIME_SCALE: the simulator's telemetry then has more real time to arrive before the wizard
+# counts it as stale (1.5 s of vehicle time is only 75 ms at 20x)
+TEST_TIME_SCALE = float(os.environ.get("ROVER_WIZARD_TEST_TIME_SCALE", "20"))
 timebase.set_time_scale(TEST_TIME_SCALE)
 
 BY_ID = {step.id: step for step in STEPS}

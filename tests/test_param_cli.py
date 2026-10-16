@@ -18,10 +18,7 @@ from rover_wizard.param_cli import ParamRequest, format_parameter_value, parse_r
 from rover_wizard.vehicle.link import Vehicle  # noqa: E402
 
 from util.fake_autopilot import FakeAutopilot  # noqa: E402
-from util.helpers import make  # noqa: E402
-
-# util.helpers fast-forwards the simulated time this much
-TEST_TIME_SCALE = 20.0
+from util.helpers import TEST_TIME_SCALE, make  # noqa: E402
 
 PORTS = itertools.count(14710)
 
