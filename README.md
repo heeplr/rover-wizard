@@ -6,8 +6,22 @@
 ![rover-wizard main screenshot](screenshots/main_screen.jpg)
 
 
-A Textual TUI wizard that talks MAVLink to an ArduPilot Rover and walks through setup, calibration and tuning step by step.
-Supports **front-wheel (Ackermann) steering** and **skid steering**. Click "❓" next to any step or field for help.
+A Textual TUI wizard that talks MAVLink to an ArduPilot Rover and walks through setup, calibration
+and tuning step by step with the ability to autoprobe various settings.
+Supports **front-wheel (Ackermann) steering** and **skid steering**.
+Click "❓" next to any step or field for help.
+
+
+## Features
+* autoprobes various settings (e.g. MOT_THR_MIN, GPSx_TYPE, ATC_SPEED_MAX, TURN_RADIUS, PID parameters etc.)
+* realtime monitor for RC-Channels, Servo outputs, Accel, Gyro, relay states
+* adjust arbitrary servo's PWM to verify connections
+* set/get parameters from commandline with wildcard support (e.g. `rover-wizard --param ATC_SPEED_*`)
+* parameter view to list/edit all parameters
+* extensive documentation built into app
+* works with current vehicle settings or after factory reset
+* backup/restore current FC parameter config
+* show/undo parameter changes
 
 
 ## Install
