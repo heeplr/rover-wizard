@@ -163,21 +163,27 @@ def _action(ctx, step_id, part):
 # ---- closed-loop verification: the manual (Acro) tracking report ------------------------------------------------------
 
 
-def test_manual_tracking_report(wizard):
+# samples the recording takes with each stick position: more than the report needs (TRACKING_MIN_PAIRS = 20)
+SAMPLES_PER_STICK_POSITION = 40
+
+
+def test_manual_tracking_report(wizard, monkeypatch):
     vehicle, ctx, log = wizard
     vehicle.arm()
     enter(ctx, "verify")
     ctx.values["how_verify"] = "manual"
+    # counted, so the pilot holds each position for enough samples however slowly the machine runs
+    samples = []
+    sample = vehicle.sample
+    monkeypatch.setattr(vehicle, "sample", lambda: samples.append(1) or sample())
 
     def pilot():
         """Drive with varied sticks for a while, then press Continue."""
         wait_until(lambda: ctx.waiting)
-        start = timebase.now()
         for sticks in ((0.0, 0.6), (0.7, 0.6), (-0.7, 0.4), (0.0, 0.8)):
             vehicle.pilot_sticks = sticks
-            while timebase.now() - start < 3:
-                timebase.sleep(0.05)
-            start = timebase.now()
+            target = len(samples) + SAMPLES_PER_STICK_POSITION
+            wait_until(lambda: len(samples) >= target)
         vehicle.pilot_sticks = (0.0, 0.0)
         ctx.press_continue()
 

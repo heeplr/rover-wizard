@@ -57,6 +57,8 @@ class RcOverrideDriver:
         self._steering = self._throttle = 0.0
         self.active = False
         self._thread: Optional[threading.Thread] = None
+        # set by set(): new sticks go out at once, not with the next refresh
+        self._changed = threading.Event()
 
     def start(self) -> None:
         """Switch to Manual mode and start sending the virtual sticks (centred)."""
@@ -76,16 +78,19 @@ class RcOverrideDriver:
         self._thread.start()
 
     def set(self, steering: float, throttle: float) -> None:
-        """New virtual stick positions, each -1..1."""
+        """New virtual stick positions, each -1..1 - sent right away if they changed."""
+        changed = (steering, throttle) != (self._steering, self._throttle)
         self._steering = steering
         self._throttle = throttle
+        if changed:
+            self._changed.set()
 
     def stop(self) -> None:
         """Centre the sticks for a moment, then release the override."""
         if not self.active:
             return
 
-        self._steering = self._throttle = 0.0
+        self.set(0.0, 0.0)
         # a few centred packets so the vehicle sees "stop" before control returns to the pilot
         timebase.sleep(CENTRED_STOP_SECONDS)
         self._end_pump()
@@ -101,6 +106,8 @@ class RcOverrideDriver:
     def _end_pump(self) -> None:
         """Stop re-sending the override and wait for the sending thread to finish."""
         self.active = False
+        # wake the thread now instead of after its refresh period
+        self._changed.set()
         if self._thread:
             self._thread.join(PUMP_STOP_WAIT_SECONDS)
 
@@ -108,13 +115,15 @@ class RcOverrideDriver:
         """Background thread: keep re-sending the virtual sticks so the override doesn't expire."""
         steering_channel, throttle_channel = self._vehicle.rc_mapping()
         while self.active:
+            # cleared before reading the sticks: a set() from now on is sent by the next round
+            self._changed.clear()
             self._vehicle.rc_override(
                 {
                     steering_channel: stick_to_pwm(self._steering, self._vehicle.rc_calibration(steering_channel)),
                     throttle_channel: stick_to_pwm(self._throttle, self._vehicle.rc_calibration(throttle_channel)),
                 }
             )
-            timebase.sleep(OVERRIDE_REFRESH_SECONDS)
+            timebase.wait_for(self._changed, OVERRIDE_REFRESH_SECONDS)
 
 
 class _DistanceTracker:
