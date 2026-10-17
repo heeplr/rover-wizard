@@ -13,7 +13,7 @@
 | rover\_wizard/model.py                     |       77 |        0 |        2 |        0 |    100% |           |
 | rover\_wizard/motion/\_\_init\_\_.py       |        0 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/motion/analysis.py           |      204 |        4 |       50 |        5 |     96% |231, 284, 312-\>320, 364, 385 |
-| rover\_wizard/motion/driving.py            |      172 |        5 |       46 |        2 |     97% |64, 229-230, 239-\>242, 330-331 |
+| rover\_wizard/motion/driving.py            |      178 |        5 |       48 |        2 |     97% |66, 238-239, 248-\>251, 339-340 |
 | rover\_wizard/motion/servo\_test.py        |      242 |        8 |       60 |        5 |     96% |116-117, 121-122, 130-131, 270-\>272, 397, 431 |
 | rover\_wizard/param\_cli.py                |      126 |        5 |       40 |        2 |     96% |96, 121-123, 163 |
 | rover\_wizard/session/\_\_init\_\_.py      |        0 |        0 |        0 |        0 |    100% |           |
@@ -86,7 +86,7 @@
 | rover\_wizard/vehicle/link.py              |      655 |       20 |      194 |       15 |     96% |445-\>449, 464, 476-477, 505-506, 510-\>484, 534-535, 542-\>exit, 545-546, 643-\>exit, 665-668, 760-762, 882, 914-\>912, 1055, 1096, 1108, 1206, 1218 |
 | rover\_wizard/vehicle/rc\_scaling.py       |       24 |        1 |        8 |        1 |     94% |        39 |
 | rover\_wizard/vehicle/simulator.py         |      492 |        9 |      168 |        8 |     97% |597, 659, 661, 681-682, 706, 709-714, 1041-\>exit, 1160 |
-| **TOTAL**                                  | **6048** |  **219** | **1604** |  **199** | **94%** |           |
+| **TOTAL**                                  | **6054** |  **219** | **1606** |  **199** | **94%** |           |
 
 
 ## Setup coverage badge
