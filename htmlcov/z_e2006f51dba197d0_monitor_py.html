@@ -55,8 +55,8 @@
             </div>
         </aside>
         <h2>
-            <span class="text">71 statements &nbsp;</span>
-            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">70<span class="text"> run</span></button>
+            <span class="text">74 statements &nbsp;</span>
+            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">73<span class="text"> run</span></button>
             <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">1<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">0<span class="text"> excluded</span></button>
             <button type="button" class="par run show_par button_toggle_par" value="par" data-shortcut="p" title="Toggle lines partially run">2<span class="text"> partial</span></button>
@@ -67,7 +67,7 @@
             <a id="nextFileLink" class="nav" href="z_e2006f51dba197d0_param_docs_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.16.2">coverage.py v7.16.2</a>,
-            created at 2026-10-17 13:14 +0000
+            created at 2026-10-19 19:13 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -231,6 +231,12 @@
     <p class="run"><span class="n"><a id="t147" href="#t147">147</a></span><span class="t"><span class="key">def</span> <span class="nam">gyro_bars_text</span><span class="op">(</span><span class="nam">gyro</span><span class="op">:</span> <span class="nam">Optional</span><span class="op">[</span><span class="nam">tuple</span><span class="op">]</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="nam">str</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t148" href="#t148">148</a></span><span class="t">    <span class="str">&quot;&quot;&quot;Gyro X/Y/Z [deg/s] as bars.&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t149" href="#t149">149</a></span><span class="t">    <span class="key">return</span> <span class="nam">signed_bar_text</span><span class="op">(</span><span class="nam">gyro</span><span class="op">,</span> <span class="nam">GYRO_FULL_SCALE_DEG_S</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t150" href="#t150">150</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t151" href="#t151">151</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t152" href="#t152">152</a></span><span class="t"><span class="key">def</span> <span class="nam">barometer_text</span><span class="op">(</span><span class="nam">reading</span><span class="op">:</span> <span class="nam">Optional</span><span class="op">[</span><span class="nam">tuple</span><span class="op">]</span><span class="op">,</span> <span class="nam">healthy</span><span class="op">:</span> <span class="nam">Optional</span><span class="op">[</span><span class="nam">bool</span><span class="op">]</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="nam">str</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t153" href="#t153">153</a></span><span class="t">    <span class="str">&quot;&quot;&quot;The barometer in use: &#x27;1013.2 hPa  24.5 C&#x27;, with a warning while ArduPilot reports it unhealthy.&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t154" href="#t154">154</a></span><span class="t">    <span class="nam">text</span> <span class="op">=</span> <span class="str">&quot;no reading&quot;</span> <span class="key">if</span> <span class="nam">reading</span> <span class="key">is</span> <span class="key">None</span> <span class="key">else</span> <span class="fst">f&quot;</span><span class="op">{</span><span class="nam">reading</span><span class="op">[</span><span class="num">0</span><span class="op">]</span><span class="op">:</span><span class="fst">.1f</span><span class="op">}</span><span class="fst"> hPa  </span><span class="op">{</span><span class="nam">reading</span><span class="op">[</span><span class="num">1</span><span class="op">]</span><span class="op">:</span><span class="fst">.1f</span><span class="op">}</span><span class="fst"> C</span><span class="fst">&quot;</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t155" href="#t155">155</a></span><span class="t">    <span class="key">return</span> <span class="nam">text</span> <span class="op">+</span> <span class="op">(</span><span class="str">&quot;  NOT healthy&quot;</span> <span class="key">if</span> <span class="nam">healthy</span> <span class="key">is</span> <span class="key">False</span> <span class="key">else</span> <span class="str">&quot;&quot;</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
 </main>
 <footer>
     <div class="content">
@@ -240,7 +246,7 @@
             <a class="nav" href="z_e2006f51dba197d0_param_docs_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.16.2">coverage.py v7.16.2</a>,
-            created at 2026-10-17 13:14 +0000
+            created at 2026-10-19 19:13 +0000
         </p>
     </div>
 </footer>
