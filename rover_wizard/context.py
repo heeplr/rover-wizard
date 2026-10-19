@@ -315,7 +315,7 @@ class Ctx:
                 # everything checked -> the "all" value itself
                 new = all_bit
             if new != current:
-                self.set_param(name, new)
+                self.set_param(name, new, reboot=any(field.reboot for field in fields))
                 written += 1
         return written
 
