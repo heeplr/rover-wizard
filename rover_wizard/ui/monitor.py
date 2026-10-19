@@ -147,3 +147,9 @@ def accel_bars_text(accel: Optional[tuple]) -> str:
 def gyro_bars_text(gyro: Optional[tuple]) -> str:
     """Gyro X/Y/Z [deg/s] as bars."""
     return signed_bar_text(gyro, GYRO_FULL_SCALE_DEG_S)
+
+
+def barometer_text(reading: Optional[tuple], healthy: Optional[bool]) -> str:
+    """The barometer in use: '1013.2 hPa  24.5 C', with a warning while ArduPilot reports it unhealthy."""
+    text = "no reading" if reading is None else f"{reading[0]:.1f} hPa  {reading[1]:.1f} C"
+    return text + ("  NOT healthy" if healthy is False else "")

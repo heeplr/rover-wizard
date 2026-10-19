@@ -45,6 +45,14 @@ from ..ardupilot_defs import (
     SERVO_FUNCTION_THROTTLE_LEFT,
     SERVO_FUNCTION_THROTTLE_RIGHT,
     SERVO_OUTPUTS,
+    BARO_DEVICE_TYPE_MS5611,
+    BARO_INSTANCES,
+    BARO_PROBE_EXT_BITS,
+    DEVICE_BUS_TYPE_I2C,
+    DEVICE_BUS_TYPE_SPI,
+    DEVID_BUS_BITS,
+    DEVID_BUS_TYPE_BITS,
+    DEVID_BYTE_BITS,
 )
 from ..mavlink_defs import (
     ACCELCAL_VEHICLE_POS_BACK,
@@ -83,6 +91,8 @@ from ..mavlink_defs import (
     PREFLIGHT_CALIBRATION_ACCEL,
     SYS_STATUS_CENTIAMPS_PER_AMP,
     SYS_STATUS_MILLIVOLTS_PER_VOLT,
+    MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE,
+    SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
 )
 from .rc_scaling import pwm_to_stick, stick_to_pwm
 from ..util.rotation import ORIENTATION_NAME_BY_VALUE, rotation_matrix_for_name, transform, transpose
@@ -93,6 +103,7 @@ from .link import (
     INBOX_MAG_CAL_PROGRESS,
     INBOX_MAG_CAL_REPORT,
     MODE_CHANGE_TIMEOUT,
+    PRESSURE_MESSAGES,
     Vehicle,
 )
 
@@ -100,6 +111,27 @@ from .link import (
 SIMULATED_TEMPERATURE_SENSORS = range(1, 4)
 # [s] an override not refreshed for this long is dropped
 RC_OVERRIDE_TIMEOUT = 3.0
+# [hPa, deg C] what the simulated barometers measure
+SIMULATED_PRESSURE_HPA = 1013.2
+SIMULATED_BARO_TEMPERATURE = 24.5
+# [hPa] barometer n reads this much more than SIMULATED_PRESSURE_HPA times n
+BARO_INSTANCE_OFFSET_HPA = 0.1
+
+
+def make_device_id(bus_type: int, bus: int, address: int, device_type: int) -> int:
+    """A device ID as ArduPilot packs it (AP_HAL::Device::make_bus_id)."""
+    return (
+        bus_type
+        | bus << DEVID_BUS_TYPE_BITS
+        | address << (DEVID_BUS_TYPE_BITS + DEVID_BUS_BITS)
+        | device_type << (DEVID_BUS_TYPE_BITS + DEVID_BUS_BITS + DEVID_BYTE_BITS)
+    )
+
+
+# an MS5611 on SPI bus 1, like on many Pixhawk-style boards
+INTERNAL_BAROMETER_DEVID = make_device_id(DEVICE_BUS_TYPE_SPI, 1, 0, BARO_DEVICE_TYPE_MS5611)
+# BARO_PROBE_EXT bits Rover looks for
+PROBED_BARO_BITS = sum(bit for bit, _ in BARO_PROBE_EXT_BITS)
 # [s] integration step
 PHYSICS_STEP = 0.02
 # [s] real time between telemetry updates
@@ -238,6 +270,10 @@ class SimVehicle(Vehicle):
         self.true_proximity = None
         # MNT1_TYPE that makes the gimbal move
         self.true_gimbal_type = None
+        # (BARO_PROBE_EXT bit, device type, I2C bus, address) of an external barometer: found at boot when probed for
+        self.true_external_baro = None
+        # the barometers report "not healthy" (e.g. a faulty sensor)
+        self.barometers_unhealthy = False
         # accelerometer calibration (like AP_AccelCal): the position waited for, when it was last requested, and
         # the position whose samples are being collected with the time collecting ends
         self._accel_cal_waiting_for = None
@@ -433,6 +469,13 @@ class SimVehicle(Vehicle):
             COMPASS_CAL_FIT=16,
             COMPASS_EXTERNAL=1,
             COMPASS_DEV_ID=97539,
+            # the flight controller's own barometer
+            BARO1_DEVID=INTERNAL_BAROMETER_DEVID,
+            BARO2_DEVID=0,
+            BARO3_DEVID=0,
+            BARO_PRIMARY=0,
+            BARO_PROBE_EXT=0,
+            BARO_EXT_BUS=-1,
             COMPASS_PRIO1_ID=97539,
             COMPASS_DEV_ID2=0,
             COMPASS_DEV_ID3=0,
@@ -635,7 +678,23 @@ class SimVehicle(Vehicle):
 
         self._distance_sensors.clear()
         self._servo_pwm.clear()
+        self._detect_barometers()
         timebase.sleep(1.0)
+
+    def _detect_barometers(self) -> None:
+        """Like AP_Baro::init at boot: the internal barometer, then an external one if BARO_PROBE_EXT asks for its
+        type on its bus (BARO_EXT_BUS, -1 = every external bus)."""
+        found = [INTERNAL_BAROMETER_DEVID]
+        if self.true_external_baro is not None:
+            bit, device_type, bus, address = self.true_external_baro
+            searched_bus = self.get_int("BARO_EXT_BUS", -1)
+            if self.get_int("BARO_PROBE_EXT") & bit & PROBED_BARO_BITS and searched_bus in (-1, bus):
+                found.append(make_device_id(DEVICE_BUS_TYPE_I2C, bus, address, device_type))
+        for instance in BARO_INSTANCES:
+            devid = found[instance - 1] if instance <= len(found) else 0
+            self._store_param(
+                f"BARO{instance}_DEVID", float(devid), MAV_PARAM_TYPE_INT32, PARAM_INDEX_UNKNOWN, self._param_total
+            )
 
     def setup_streams(self) -> None:
         """Nothing to request - the simulator always publishes everything."""
@@ -1075,9 +1134,25 @@ class SimVehicle(Vehicle):
                 current_battery=(
                     round(self._battery_amps() * SYS_STATUS_CENTIAMPS_PER_AMP) if self.reports_current else -1
                 ),
+                onboard_control_sensors_present=MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE,
+                onboard_control_sensors_enabled=MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE,
+                onboard_control_sensors_health=(
+                    0 if self.barometers_unhealthy else MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+                ),
             ),
             timestamp,
         )
+        for instance, message_type in PRESSURE_MESSAGES.items():
+            if self.get_int(f"BARO{instance}_DEVID"):
+                self._store_message(
+                    message_type,
+                    SimpleNamespace(
+                        # each a little different, like real sensors
+                        press_abs=SIMULATED_PRESSURE_HPA + instance * BARO_INSTANCE_OFFSET_HPA,
+                        temperature=round(SIMULATED_BARO_TEMPERATURE * SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE),
+                    ),
+                    timestamp,
+                )
 
         # Encoders count revolutions; the autopilot turns them into distance with its (possibly wrong) radius.
         def reported_distance(radius):

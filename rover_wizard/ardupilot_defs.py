@@ -144,3 +144,68 @@ RANGEFINDER_INSTANCES = "123456789A"
 # skips every check. Older firmware's ARMING_CHECK lists the checks to perform: 0 performs none.
 ARMING_SKIPCHK_ALL = -1
 ARMING_CHECK_NONE = 0
+
+
+# ---- Barometers ------------------------------------------------------------------------------------------------------
+# BARO1_DEVID .. BARO3_DEVID: the barometers found at boot, in the order of SCALED_PRESSURE, _PRESSURE2, _PRESSURE3
+BARO_INSTANCES = (1, 2, 3)
+# A device ID packs (AP_HAL/Device.h, DeviceStructure): bits 0-2 bus type, 3-7 bus number, 8-15 address on the bus,
+# 16-23 the driver's device type.
+DEVID_BUS_TYPE_BITS = 3
+DEVID_BUS_BITS = 5
+DEVID_BYTE_BITS = 8
+# AP_HAL::Device::BusType
+DEVICE_BUS_TYPES = {1: "I2C", 2: "SPI", 3: "DroneCAN", 4: "SITL", 5: "MSP", 6: "serial", 7: "WSPI"}
+DEVICE_BUS_TYPE_I2C = 1
+DEVICE_BUS_TYPE_SPI = 2
+DEVICE_BUS_TYPE_DRONECAN = 3
+DEVICE_BUS_TYPE_MSP = 5
+# AP_Baro_Backend::DevTypes
+BARO_DEVICE_TYPES = {
+    0x01: "SITL",
+    0x02: "BMP085",
+    0x03: "BMP280",
+    0x04: "BMP388",
+    0x05: "DPS280",
+    0x06: "DPS310",
+    0x07: "FBM320",
+    0x08: "ICM20789",
+    0x09: "KellerLD",
+    0x0A: "LPS2XH",
+    0x0B: "MS5611",
+    0x0C: "SPL06",
+    0x0D: "DroneCAN",
+    0x0E: "MSP",
+    0x0F: "ICP101XX",
+    0x10: "ICP201XX",
+    0x11: "MS5607",
+    0x12: "MS5837-30BA",
+    0x13: "MS5637",
+    0x14: "BMP390",
+    0x15: "BMP581",
+    0x16: "SPA06",
+    0x17: "AUAV",
+    0x18: "MS5837-02BA",
+}
+BARO_DEVICE_TYPE_MS5611 = 0x0B
+BARO_DEVICE_TYPE_BMP280 = 0x03
+# BARO_PROBE_EXT bits Rover looks for at boot (AP_Baro::_probe_i2c_barometers; Keller and MS5837 only on Sub):
+# I2C sensors on the external buses (or the one BARO_EXT_BUS names), MSP from an MSP serial device
+BARO_PROBE_EXT_BITS = [
+    (1 << 0, "BMP085"),
+    (1 << 1, "BMP280"),
+    (1 << 2, "MS5611"),
+    (1 << 3, "MS5607"),
+    (1 << 4, "MS5637"),
+    (1 << 5, "FBM320"),
+    (1 << 6, "DPS280"),
+    (1 << 7, "LPS25H"),
+    (1 << 10, "BMP388 / BMP390"),
+    (1 << 11, "SPL06 / SPA06"),
+    (1 << 12, "MSP (MSP serial device)"),
+    (1 << 13, "BMP581"),
+    (1 << 14, "AUAV"),
+]
+BARO_PROBE_EXT_BMP280 = 1 << 1
+# BARO_EXT_BUS = -1: search every external I2C bus
+BARO_EXT_BUS_ALL = -1

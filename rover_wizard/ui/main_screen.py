@@ -26,6 +26,7 @@ from ..mavlink_defs import GPS_FIX_TYPE_NAMES, SYS_STATUS_MILLIVOLTS_PER_VOLT
 from ..model import Action, Field, parameter_names_text
 from ..steps.util.actions import action_reboot_flight_controller
 from ..steps.util.hardware import has, is_accelerometer_fitted, is_gyro_fitted
+from ..steps.barometer import barometer_in_use
 from ..steps.relays import toggle_relay
 from .step_catalog import STEPS
 from ..session.store import STEP_DONE, STEP_SKIPPED
@@ -34,7 +35,15 @@ from .param_docs import describe
 from .markdown import markdown_parser
 from .modals import LOG_MIN_WIDTH, ConfirmScreen, HelpScreen, LeaveStepScreen, ProbeScreen, run_on_ui_thread
 from .param_screen import ParameterScreen
-from .monitor import accel_bars_text, compass_tape_text, gyro_bars_text, number_row, rc_bar_text, servo_bar_text
+from .monitor import (
+    accel_bars_text,
+    barometer_text,
+    compass_tape_text,
+    gyro_bars_text,
+    number_row,
+    rc_bar_text,
+    servo_bar_text,
+)
 
 STATUS_REFRESH_SECONDS = 0.7
 BUSY_MESSAGE = "⏳ An operation is running - wait for it or press Cancel."
@@ -119,7 +128,8 @@ class MainScreen(Screen):
 
     def _compose_monitor(self) -> ComposeResult:
         """Live panel under the step list: RC channel bars; per servo output its number, +, - and bar; - when the
-        sensor is present - a compass tape and accelerometer / gyro bars; and a toggle button per relay."""
+        sensor is present - a compass tape, accelerometer / gyro bars and the barometer's reading; and a toggle button
+        per relay."""
         with Vertical(id="monitor"):
             yield Static("RC channels", classes="panel-title")
             yield Static("", id="rc-bars")
@@ -148,6 +158,8 @@ class MainScreen(Screen):
                     with Horizontal(id="relay-buttons"):
                         for relay in RELAYS:
                             yield Button(str(relay), id=f"relay-{relay}", flat=True, classes="relay-btn")
+            yield Static("Barometer", classes="panel-title", id="baro-title")
+            yield Static("", id="baro-monitor")
 
     async def on_mount(self) -> None:
         """Connect the context's output to this screen and open the first unfinished step."""
@@ -231,6 +243,12 @@ class MainScreen(Screen):
         )
         self._show_monitor_section("accel", is_accelerometer_fitted(self.ctx), lambda: accel_bars_text(imu and imu[0]))
         self._show_monitor_section("gyro", is_gyro_fitted(self.ctx), lambda: gyro_bars_text(imu and imu[1]))
+        barometer = barometer_in_use(self.ctx)
+        self._show_monitor_section(
+            "baro",
+            barometer is not None,
+            lambda: barometer_text(vehicle.pressure(barometer), vehicle.barometers_healthy()),
+        )
         self._update_relay_buttons(vehicle.relays())
 
     def _update_relay_buttons(self, relays: dict) -> None:

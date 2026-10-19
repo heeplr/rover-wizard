@@ -197,6 +197,10 @@ GPS_RAW_INT_EPH_SCALE = 100
 SYS_STATUS_MILLIVOLTS_PER_VOLT = 1000
 # current_battery is in cA (-1 = not measured)
 SYS_STATUS_CENTIAMPS_PER_AMP = 100
+# SYS_STATUS.onboard_control_sensors_* bit of the barometer(s)
+MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE = 8
+# SCALED_PRESSURE.temperature is in centi-degrees Celsius
+SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE = 100
 # SCALED_IMU acceleration unit: milli-g.
 MILLI_G_PER_G = 1000
 # SCALED_IMU rotation-rate unit: milli-radians per second.

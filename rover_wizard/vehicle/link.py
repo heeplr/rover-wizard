@@ -53,6 +53,7 @@ from ..mavlink_defs import (
     MAVLINK_MSG_ID_VFR_HUD,
     MAVLINK_MSG_ID_WHEEL_DISTANCE,
     MAV_AUTOPILOT_ARDUPILOTMEGA,
+    MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE,
     MAV_AUTOPILOT_INVALID,
     MAV_CMD_ACCELCAL_VEHICLE_POS,
     MAV_CMD_COMPONENT_ARM_DISARM,
@@ -87,6 +88,7 @@ from ..mavlink_defs import (
     PARAM_INDEX_UNKNOWN,
     RC_CHANNELS_MAX,
     UINT16_MAX,
+    SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
 )
 from .rc_scaling import RcChannelCalibration, pwm_to_stick
 
@@ -162,6 +164,9 @@ ARM_CONFIRM_SECONDS = 3.0
 DEFAULT_BAUD_RATE = 115200
 # telemetry older than this isn't shown in the live panel
 MONITOR_MAX_AGE_SECONDS = 2.0
+# barometer n reports in SCALED_PRESSURE, SCALED_PRESSURE2, SCALED_PRESSURE3 (GCS_Common.cpp send_scaled_pressure*);
+# they come with the raw-sensors telemetry group, which setup_streams() requests at ALL_STREAMS_RATE_HZ
+PRESSURE_MESSAGES = {1: "SCALED_PRESSURE", 2: "SCALED_PRESSURE2", 3: "SCALED_PRESSURE3"}
 # RCMAP_ROLL, RCMAP_THROTTLE defaults: steering on RC1, throttle on RC3
 ARDUPILOT_DEFAULT_RCMAP = (1, 3)
 
@@ -1037,6 +1042,21 @@ class Vehicle:
         attitude = self.latest("ATTITUDE", max_age=MONITOR_MAX_AGE_SECONDS)
         # ATTITUDE.yaw is -pi..pi radians
         return None if attitude is None else math.degrees(attitude.yaw) % 360
+
+    def pressure(self, instance: int = 1) -> Optional[tuple]:
+        """(pressure [hPa], temperature [deg C]) of barometer `instance` (1..3) from fresh telemetry, or None."""
+        message = self.latest(PRESSURE_MESSAGES[instance], max_age=MONITOR_MAX_AGE_SECONDS)
+        if message is None:
+            return None
+        return message.press_abs, message.temperature / SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE
+
+    def barometers_healthy(self) -> Optional[bool]:
+        """Whether every barometer is healthy, as SYS_STATUS reports it (None: not reported, or no barometer)."""
+        status = self.latest("SYS_STATUS", max_age=TELEMETRY_FRESH_SECONDS)
+        present = getattr(status, "onboard_control_sensors_present", None)
+        if present is None or not present & MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE:
+            return None
+        return bool(status.onboard_control_sensors_health & MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE)
 
     def imu(self) -> Optional[tuple]:
         """((accel x, y, z) [g], (rotation rate x, y, z) [deg/s]) from fresh SCALED_IMU data, or None."""
