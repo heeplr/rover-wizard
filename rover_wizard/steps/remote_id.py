@@ -10,7 +10,7 @@ from ..model import Step, bit_field, param_field
 
 REMOTE_ID_OPTION_BITS = [
     (1, "Enforce Remote ID arming checks"),
-    (2, "Allow arming without a GPS position"),
+    (2, "No emergency status when driving without GPS"),
     (4, "Lock the UAS ID on the first Basic ID received"),
 ]
 
