@@ -15,12 +15,13 @@ from rover_wizard.boat_defs import (
     WIND_VANE_TYPE_NMEA,
 )
 from rover_wizard.motion.sail_test import end_percent
+from rover_wizard.steps.wind_vane import action_calibrate_direction, action_set_headwind_offset
 from rover_wizard.steps.util.actions import action_reboot_flight_controller
 from rover_wizard.steps.util.rover_hardware import is_motorised
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.vehicle.sail_simulator import SailSimulation, SimLandYacht, SimSailboat
 
-from util.helpers import BY_ID, act, apply, enter, make
+from util.helpers import BY_ID, act, apply, enter, make, wait_until
 
 SAIL_OUTPUT = 4
 THROTTLE_STEPS = ("motor_output", "direction_check", "top_speed", "turning", "gains", "verify")
@@ -262,3 +263,123 @@ def test_calibration_refused_while_armed(sailboat, monkeypatch):
     monkeypatch.setattr(ctx, "pause", lambda message, during=None: None)
     vehicle.armed = True
     assert not act(ctx, "wind_vane", "Calibrate direction")
+
+
+# ---- edge cases ---------------------------------------------------------------------------------------------------------
+
+
+def test_sails_before_the_reboot_write_nothing():
+    vehicle, ctx = make(simulator=SimLandYacht, sails_enabled=False)
+    try:
+        vehicle.set_param("SAIL_ENABLE", 1)
+        enter(ctx, "sails")
+        apply(ctx, "sails")
+        assert not ctx.changes.items()
+        assert not act(ctx, "sails", "Test +"), "no sail output yet"
+    finally:
+        vehicle.disconnect()
+
+
+def test_sail_switches_without_a_motor(sailboat):
+    vehicle, ctx, _ = sailboat
+    answer_hardware(ctx, has_sails=True, has_motor=False)
+    enter(ctx, "sails")
+    ctx.set_field_value("sail_output", SAIL_OUTPUT)
+    ctx.set_field_value("mainsail_channel", 7)
+    apply(ctx, "sails")
+    assert vehicle.get_int("RC7_OPTION") == 0, "without a motor the throttle stick moves the sail"
+
+
+def test_reversed_winch(sailboat):
+    vehicle, ctx, _ = sailboat
+    assign_sail(ctx)
+    vehicle.set_param(f"SERVO{SAIL_OUTPUT}_REVERSED", 1)
+    assert act(ctx, "sails", "Test -")
+    assert vehicle._servo_output_pwm(SAIL_OUTPUT) == vehicle.get(f"SERVO{SAIL_OUTPUT}_MAX")
+
+
+def test_wind_vane_notes_and_switches(sailboat):
+    vehicle, ctx, log = sailboat
+    vehicle.set_param("WNDVN_TYPE", WIND_VANE_TYPE_ANALOG)
+    enter(ctx, "wind_vane")
+    assert ctx.values["wind_reboot"].startswith("WNDVN_TYPE is set")
+    assert act(ctx, "wind_vane", "Show wind")
+    assert log[-1].startswith("No wind reported")
+    # no sensor: the wind from the heading at arming, turned by an RC knob
+    ctx.set_field_value("WNDVN_TYPE", 2)
+    ctx.set_field_value("wind_offset_channel", 6)
+    apply(ctx, "wind_vane")
+    assert vehicle.get_int("RC6_OPTION") == 97
+
+
+def test_nmea_vane_needs_a_port(sailboat):
+    _, ctx, _ = sailboat
+    enter(ctx, "wind_vane")
+    ctx.set_field_value("WNDVN_TYPE", WIND_VANE_TYPE_NMEA)
+    with pytest.raises(VehicleError, match="serial port"):
+        apply(ctx, "wind_vane")
+
+
+def test_nmea_baud_rate_kept(sailboat):
+    vehicle, ctx, _ = sailboat
+    vehicle.set_param("SERIAL5_PROTOCOL", SERIAL_PROTOCOL_WIND_VANE)
+    vehicle.set_param("SERIAL5_BAUD", 38)
+    vehicle.set_param("WNDVN_TYPE", WIND_VANE_TYPE_NMEA)
+    action_reboot_flight_controller(ctx)
+    enter(ctx, "wind_vane")
+    assert ctx.values["wind_port"] == 5 and ctx.values["wind_baud"] == 38
+
+
+def test_failed_direction_calibration(sailboat, monkeypatch):
+    vehicle, ctx, _ = sailboat
+    set_up_vane(ctx)
+    monkeypatch.setattr(ctx, "pause", lambda message, during=None: None)
+    # the vane was hardly turned
+    vehicle.TRUE_VANE_VOLTS = (1.2, 1.8)
+    assert not act(ctx, "wind_vane", "Calibrate direction")
+    assert "Calibration failed" in vehicle.last_text()
+    assert vehicle.get("WNDVN_DIR_V_MAX") == 3.3, "nothing stored"
+
+
+def test_calibration_that_never_ends(sailboat, monkeypatch):
+    vehicle, ctx, log = sailboat
+    set_up_vane(ctx)
+    monkeypatch.setattr(ctx, "pause", lambda message, during=None: None)
+    monkeypatch.setattr(vehicle, "_advance_wind_calibration", lambda timestamp: None)
+    with pytest.raises(VehicleError, match="didn't finish the calibration"):
+        action_calibrate_direction(ctx)
+
+
+def test_calibration_of_a_vane_without_one(sailboat):
+    vehicle, _, _ = sailboat
+    vehicle.set_param("WNDVN_TYPE", WIND_VANE_TYPE_NMEA)
+    vehicle.reboot()
+    vehicle.set_param("WNDVN_CAL", 2)
+    assert wait_until(lambda: vehicle.get_int("WNDVN_CAL") == 0)
+    assert vehicle.last_text().endswith("WindVane: No cal required")
+
+
+def test_headwind_offset_without_wind(sailboat, monkeypatch):
+    vehicle, ctx, log = sailboat
+    set_up_vane(ctx)
+    monkeypatch.setattr(ctx, "pause", lambda message, during=None: None)
+    monkeypatch.setattr(vehicle, "_publish_telemetry", lambda timestamp: None)
+    vehicle._messages.clear()
+    with pytest.raises(VehicleError, match="No apparent wind reported"):
+        action_set_headwind_offset(ctx)
+
+
+def test_wind_from_the_wind_message_only(sailboat):
+    vehicle, ctx, _ = sailboat
+    from types import SimpleNamespace
+
+    from rover_wizard.steps.wind_vane import describe_wind
+
+    vehicle._store_message("WIND", SimpleNamespace(direction=270.0, speed=4.0, speed_z=0.0))
+    assert describe_wind(vehicle) == "Wind true: from 270 deg at 4.0 m/s"
+
+
+def test_other_motor_tests_on_a_sailboat(sailboat):
+    vehicle, ctx, _ = sailboat
+    # the throttle's motor test still drives the throttle output
+    assert vehicle._motor_test_output(1) == vehicle._output_with_function(70)

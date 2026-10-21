@@ -226,3 +226,97 @@ def test_depth_needs_a_choice(boat):
     assert not act(ctx, "depth_sounder", "Fill in")
     assert act(ctx, "depth_sounder", "Show depth")
     assert log[-1].startswith("No depth reported")
+
+
+# ---- edge cases ---------------------------------------------------------------------------------------------------------
+
+
+def test_torqeedo_before_its_reboot(boat):
+    vehicle, ctx, _ = boat
+    tick(ctx, "has_torqeedo")
+    enter(ctx, "torqeedo")
+    apply(ctx, "torqeedo")
+    assert vehicle.get_int("TRQD_TYPE") == 0, "type 0: nothing to set up"
+    ctx.set_field_value("trq_type", 2)
+    ctx.set_field_value("trq_port", TORQEEDO[1])
+    apply(ctx, "torqeedo")
+    assert vehicle.get_int("BATT_MONITOR") != BATTERY_MONITOR_TORQEEDO, "battery box left unticked"
+    enter(ctx, "torqeedo")
+    assert ctx.values["trq_reboot"].startswith("The Torqeedo type is set")
+
+
+def test_torqeedo_reports_on_its_output(boat):
+    vehicle, ctx, log = boat
+    vehicle.true_torqeedo = TORQEEDO
+    vehicle.set_param("TRQD_TYPE", TORQEEDO[0])
+    vehicle.set_param(f"SERIAL{TORQEEDO[1]}_PROTOCOL", SERIAL_PROTOCOL_TORQEEDO)
+    vehicle.set_param(f"SERIAL{TORQEEDO[1]}_BAUD", TORQEEDO_SERIAL_BAUD)
+    # no throttle output: ArduPilot reports on the first slot
+    vehicle.set_param("SERVO3_FUNCTION", 0)
+    action_reboot_flight_controller(ctx)
+    tick(ctx, "has_torqeedo")
+    assert act(ctx, "torqeedo", "Show motor status")
+    assert log[-1].startswith("Torqeedo: 850 rpm")
+
+
+def test_depth_sounder_needs_its_serial_port(boat):
+    vehicle, ctx, _ = boat
+    tick(ctx, "has_depth_sounder")
+    enter(ctx, "depth_sounder")
+    ctx.set_field_value("depth_type", 23)
+    with pytest.raises(VehicleError, match="serial port"):
+        apply(ctx, "depth_sounder")
+
+
+def test_depth_sounder_found_among_other_rangefinders(boat):
+    vehicle, ctx, _ = boat
+    # rangefinder 1 looks forward, rangefinder 2 down: the depth sounder is the second
+    for instance, orientation in (("1", 0), ("2", RANGEFINDER_ORIENT_DOWN)):
+        vehicle.set_param(f"RNGFND{instance}_TYPE", 17)
+        vehicle.set_param(f"RNGFND{instance}_ORIENT", orientation)
+    vehicle.set_param("SERIAL5_PROTOCOL", 9)
+    vehicle.set_param("SERIAL5_BAUD", SOUNDER_BAUD)
+    assert has("has_depth_sounder")(ctx)
+    enter(ctx, "depth_sounder")
+    assert ctx.values["depth_rangefinder"] == 2
+    # the baud rate follows the chosen port
+    ctx.set_field_value("depth_port", 5)
+    ctx.values.pop("depth_baud")
+    ctx.enter_step(BY_ID["depth_sounder"], reload=False)
+    assert ctx.values["depth_baud"] == SOUNDER_BAUD
+
+
+def test_no_depth_from_a_sounder_not_pointing_down(boat):
+    vehicle, ctx, log = boat
+    vehicle.true_rangefinder = SOUNDER
+    vehicle.true_rangefinder_baud = SOUNDER_BAUD
+    vehicle.set_param("RNGFND2_TYPE", SOUNDER[1])
+    vehicle.set_param("SERIAL5_PROTOCOL", 9)
+    vehicle.set_param("SERIAL5_BAUD", SOUNDER_BAUD)
+    enter(ctx, "depth_sounder")
+    assert act(ctx, "depth_sounder", "Show depth")
+    assert log[-1].startswith("No depth reported"), "forward-looking: a rangefinder, not a depth sounder"
+    vehicle.set_param("RNGFND2_ORIENT", RANGEFINDER_ORIENT_DOWN)
+    vehicle.set_param("FRAME_CLASS", FRAME_CLASS_ROVER)
+    assert act(ctx, "depth_sounder", "Show depth")
+    assert log[-1].startswith("No depth reported"), "Rover reports the depth for boats only"
+
+
+def test_unhealthy_depth_sounder(boat):
+    vehicle, ctx, _ = boat
+    from types import SimpleNamespace
+
+    from rover_wizard.steps.depth_sounder import describe_depth
+
+    vehicle._store_message("WATER_DEPTH", SimpleNamespace(distance=0.0, temperature=0.0, healthy=0))
+    assert describe_depth(ctx) == "Depth 0.00 m, water 0.0 deg C (NOT healthy)"
+
+
+def test_demo_vehicles():
+    from rover_wizard.vehicle.demo import DEMO_VEHICLES, demo_vehicle
+    from rover_wizard.vehicle.rover_simulator import SimVehicle
+    from rover_wizard.vehicle.sail_simulator import SimSailboat
+
+    kinds = {kind: demo_vehicle(kind) for kind in DEMO_VEHICLES}
+    assert type(kinds["boat"]) is SimBoat and type(kinds["sailboat"]) is SimSailboat
+    assert type(kinds["rover"]) is SimVehicle and kinds["skid"].skid and not kinds["rover"].skid

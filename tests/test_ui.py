@@ -834,6 +834,23 @@ async def leaving_with_unapplied_values_scenario():
         check("the reboot question starts on No", app.screen.focused is not None and app.screen.focused.id == "no")
         await pilot.press("escape")
         check("Escape answers No", await until(pilot, lambda: app.screen is screen))
+
+        # a click on another step in the sidebar asks the same; Stay keeps the clicked entry from looking selected
+        await screen.show_step(battery)
+        await pilot.pause(0.3)
+        screen.widgets["BATT_CAPACITY"].value = "7000"
+        await pilot.pause(0.2)
+        await click(pilot, screen.query_one("#nav-0"))
+        await until(pilot, lambda: isinstance(app.screen, LeaveStepScreen))
+        await click(pilot, app.screen.query_one("#stay"))
+        await until(pilot, lambda: app.screen is screen)
+        await pilot.pause(0.2)
+        check("Stay stays", screen.step_index == battery)
+        check(
+            "the clicked sidebar entry doesn't keep the focus",
+            app.focused is None or app.focused.id == f"nav-{battery}",
+            str(app.focused),
+        )
         vehicle.disconnect()
 
 
