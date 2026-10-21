@@ -6,7 +6,7 @@
 ![rover-wizard main screenshot](screenshots/main_screen.jpg)
 
 
-A Textual TUI wizard that talks MAVLink to an ArduPilot Rover (currently no boats) and walks through setup, calibration
+A Textual TUI wizard that talks MAVLink to an ArduPilot Rover and walks through setup, calibration
 and tuning step by step with the ability to autoprobe various settings.
 Supports **front-wheel (Ackermann) steering** and **skid steering**.
 Click "❓" next to any step or field for help.
