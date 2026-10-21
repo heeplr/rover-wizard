@@ -67,7 +67,7 @@
             <a id="nextFileLink" class="nav" href="z_0a58dd950627ec89_ekf_sources_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.16.2">coverage.py v7.16.2</a>,
-            created at 2026-10-20 21:09 +0000
+            created at 2026-10-21 11:02 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -96,7 +96,7 @@
     <p class="run"><span class="n"><a id="t12" href="#t12">12</a></span><span class="t"><span class="key">from</span> <span class="nam">__future__</span> <span class="key">import</span> <span class="nam">annotations</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t13" href="#t13">13</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t14" href="#t14">14</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">errors</span> <span class="key">import</span> <span class="nam">VehicleError</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t15" href="#t15">15</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">ardupilot_defs</span> <span class="key">import</span> <span class="nam">RANGEFINDER_INSTANCES</span><span class="op">,</span> <span class="nam">SERIAL_PROTOCOL_LIDAR360</span><span class="op">,</span> <span class="nam">SERIAL_PROTOCOL_RANGEFINDER</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t15" href="#t15">15</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">rover_defs</span> <span class="key">import</span> <span class="nam">RANGEFINDER_INSTANCES</span><span class="op">,</span> <span class="nam">SERIAL_PROTOCOL_LIDAR360</span><span class="op">,</span> <span class="nam">SERIAL_PROTOCOL_RANGEFINDER</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t16" href="#t16">16</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">timebase</span> <span class="key">import</span> <span class="nam">now</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t17" href="#t17">17</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">ports</span> <span class="key">import</span> <span class="op">(</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t18" href="#t18">18</a></span><span class="t">    <span class="nam">COMMON_PROBE_BAUDS</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
@@ -114,7 +114,7 @@
     <p class="run run2"><span class="n"><a id="t30" href="#t30">30</a></span><span class="t"><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t31" href="#t31">31</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">probing</span> <span class="key">import</span> <span class="nam">LIVE_DISPLAY_SECONDS</span><span class="op">,</span> <span class="nam">restore</span><span class="op">,</span> <span class="nam">restore_on_failure</span><span class="op">,</span> <span class="nam">snapshot</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t32" href="#t32">32</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">actions</span> <span class="key">import</span> <span class="nam">action_reboot_flight_controller</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t33" href="#t33">33</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">hardware</span> <span class="key">import</span> <span class="nam">has</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t33" href="#t33">33</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">util</span><span class="op">.</span><span class="nam">rover_hardware</span> <span class="key">import</span> <span class="nam">has</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t34" href="#t34">34</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">model</span> <span class="key">import</span> <span class="nam">Action</span><span class="op">,</span> <span class="nam">Step</span><span class="op">,</span> <span class="nam">bit_field</span><span class="op">,</span> <span class="nam">param_field</span><span class="op">,</span> <span class="nam">value_field</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t35" href="#t35">35</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t36" href="#t36">36</a></span><span class="t"><span class="com"># RNGFNDn_TYPE values and names from ArduPilot&#x27;s parameter definitions (simulator-only types left out).</span>&nbsp;</span><span class="r"></span></p>
@@ -689,7 +689,7 @@
             <a class="nav" href="z_0a58dd950627ec89_ekf_sources_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.16.2">coverage.py v7.16.2</a>,
-            created at 2026-10-20 21:09 +0000
+            created at 2026-10-21 11:02 +0000
         </p>
     </div>
 </footer>
