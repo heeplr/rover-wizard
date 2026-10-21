@@ -8,7 +8,6 @@
 
 A Textual TUI wizard that talks MAVLink to an ArduPilot Rover and walks through setup, calibration
 and tuning step by step with the ability to autoprobe various settings.
-Supports **front-wheel (Ackermann) steering** and **skid steering**.
 Click "❓" next to any step or field for help.
 
 
@@ -43,7 +42,7 @@ pip install .
 ## Run
 ```sh
 rover-wizard --help
-usage: rover_wizard [-h] [--version] [--conn CONN] [--baud BAUD] [--demo] [--demo-skid] [-p NAME[=VALUE]]
+usage: rover_wizard [-h] [--version] [--conn CONN] [--baud BAUD] [--demo] [--demo-skid] [--demo-boat] [--demo-sailboat] [-p NAME[=VALUE]]
 
 ArduPilot Rover setup & tuning wizard (Textual UI)
 
@@ -54,10 +53,15 @@ options:
   --baud BAUD           serial baud rate (ignored for UDP/TCP)
   --demo                use a simulated front-wheel-steering rover
   --demo-skid           use a simulated skid-steering rover
+  --demo-boat           use a simulated boat with rudder and motor
+  --demo-sailboat       use a simulated sailing boat with a motor
   -p, --param NAME[=VALUE]
-                        print a parameter (NAME, or a pattern like 'SERVO1_*') or
-                        write it (NAME=VALUE), then exit without the UI; repeatable, handled in order
+                        print a parameter (NAME, or a pattern like 'SERVO1_*') or write it (NAME=VALUE), then exit without the UI; repeatable, handled in order
+```
 
+e.g.
+
+```sh
 rover-wizard --conn /dev/ttyACM0 --baud 115200
 ```
 
@@ -106,6 +110,7 @@ Below the step list, there is a monitor section:
  * **Accel** shows current accelerometer output
  * **Gyro** shows current gyroscope output
  * **Relais** shows current state for each relay if present (click to switch)
+ * **Barometer** shows current barometer output
 
 
 ### Parameter screen
