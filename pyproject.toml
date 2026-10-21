@@ -29,7 +29,7 @@ rover-wizard = "rover_wizard.__main__:main"
 include = ["rover_wizard*"]
 
 [tool.setuptools.package-data]
-"rover_wizard.ui" = ["wizard_text.json", "param_docs.json", "wizard_app.css"]
+"rover_wizard.ui" = ["wizard_text.json", "wizard_text_water.json", "param_docs.json", "wizard_app.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
