@@ -6,7 +6,6 @@
 |-------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | rover\_wizard/\_\_init\_\_.py               |       19 |        6 |        2 |        1 |     67% |     29-34 |
 | rover\_wizard/\_\_main\_\_.py               |       38 |        1 |       12 |        1 |     96% |        69 |
-| rover\_wizard/ardupilot\_defs.py            |       66 |       66 |        0 |        0 |      0% |     8-211 |
 | rover\_wizard/boat\_defs.py                 |       33 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/context.py                    |      296 |        8 |      112 |        8 |     96% |108, 127-128, 134, 162, 206-\>208, 212-\>219, 293, 300, 304 |
 | rover\_wizard/flow.py                       |       27 |        0 |        6 |        0 |    100% |           |
@@ -29,7 +28,7 @@
 | rover\_wizard/steps/beacon.py               |       16 |        1 |        4 |        2 |     85% |19-\>exit, 22 |
 | rover\_wizard/steps/boat\_loiter.py         |        6 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/compass.py              |      295 |       11 |       92 |       14 |     94% |84, 97, 146, 185-\>196, 202, 249, 274, 280, 471, 479-\>481, 481-\>483, 486, 571, 592 |
-| rover\_wizard/steps/depth\_sounder.py       |       61 |        1 |       12 |        2 |     96% |111-\>exit, 114 |
+| rover\_wizard/steps/depth\_sounder.py       |       61 |        0 |       12 |        1 |     99% |111-\>exit |
 | rover\_wizard/steps/direction\_check.py     |       66 |        3 |       26 |        6 |     90% |102, 108, 123, 130-\>134, 136-\>145, 141-\>145 |
 | rover\_wizard/steps/distance\_sensors.py    |      173 |        9 |       52 |        8 |     92% |290, 297, 342-343, 360-\>350, 393, 401-402, 415-\>408, 421-422 |
 | rover\_wizard/steps/ekf\_sources.py         |       61 |        2 |       10 |        2 |     94% |  101, 114 |
@@ -51,7 +50,7 @@
 | rover\_wizard/steps/relays.py               |       37 |        1 |        6 |        1 |     95% |        50 |
 | rover\_wizard/steps/remote\_id.py           |       22 |        2 |        6 |        2 |     86% |    33, 37 |
 | rover\_wizard/steps/rpm.py                  |       30 |        0 |        4 |        1 |     97% | 53-\>exit |
-| rover\_wizard/steps/sails.py                |       52 |        2 |       16 |        3 |     93% |93, 105, 116-\>exit |
+| rover\_wizard/steps/sails.py                |       52 |        0 |       16 |        0 |    100% |           |
 | rover\_wizard/steps/save.py                 |       12 |        0 |        4 |        0 |    100% |           |
 | rover\_wizard/steps/scripting.py            |       18 |        0 |        2 |        0 |    100% |           |
 | rover\_wizard/steps/serial\_ports.py        |       20 |        0 |        4 |        0 |    100% |           |
@@ -60,7 +59,7 @@
 | rover\_wizard/steps/steering\_output.py     |       21 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/temperature.py          |       11 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/top\_speed.py           |       32 |        1 |        8 |        3 |     90% |55, 63-\>67, 67-\>73 |
-| rover\_wizard/steps/torqeedo.py             |       52 |        2 |       12 |        3 |     92% |62, 69, 75-\>77 |
+| rover\_wizard/steps/torqeedo.py             |       52 |        0 |       12 |        0 |    100% |           |
 | rover\_wizard/steps/turning.py              |       52 |        4 |       10 |        5 |     85% |65, 72, 96, 103, 111-\>116 |
 | rover\_wizard/steps/util/\_\_init\_\_.py    |        0 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/util/actions.py         |       19 |        2 |        8 |        3 |     81% |13, 18-\>exit, 25 |
@@ -68,7 +67,6 @@
 | rover\_wizard/steps/util/choices.py         |        3 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/util/compass\_slots.py  |       27 |        2 |       10 |        2 |     89% |    40, 55 |
 | rover\_wizard/steps/util/driving.py         |       15 |        0 |        2 |        0 |    100% |           |
-| rover\_wizard/steps/util/hardware.py        |       60 |       60 |        6 |        0 |      0% |     4-239 |
 | rover\_wizard/steps/util/outputs.py         |       83 |        1 |       38 |        1 |     98% |       226 |
 | rover\_wizard/steps/util/ports.py           |       40 |        1 |        8 |        1 |     96% |        62 |
 | rover\_wizard/steps/util/probing.py         |       36 |        0 |        6 |        1 |     98% |   65-\>67 |
@@ -77,11 +75,11 @@
 | rover\_wizard/steps/verify.py               |      107 |        7 |       26 |        5 |     91% |85, 143-144, 181, 192, 245-246 |
 | rover\_wizard/steps/visual\_odometry.py     |        5 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/wheel\_encoders.py      |       57 |        5 |       18 |        5 |     87% |66, 75, 85, 95, 97 |
-| rover\_wizard/steps/wind\_vane.py           |      108 |        7 |       28 |        9 |     88% |116, 125, 129, 148, 151, 190, 205, 207-\>209, 209-\>211 |
+| rover\_wizard/steps/wind\_vane.py           |      108 |        0 |       28 |        1 |     99% | 209-\>211 |
 | rover\_wizard/texts.py                      |       24 |        0 |        4 |        0 |    100% |           |
 | rover\_wizard/ui/\_\_init\_\_.py            |        0 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/ui/connect\_screen.py         |       60 |        0 |        8 |        1 |     99% | 62-\>exit |
-| rover\_wizard/ui/main\_screen.py            |      466 |       20 |      162 |       19 |     93% |225, 282-283, 375, 377-378, 472-\>463, 476-\>463, 484, 490, 513, 521-523, 525-\>exit, 529, 533-\>exit, 556-\>exit, 569-\>exit, 614-\>616, 622, 642-644, 662, 676, 680-681, 695-\>exit |
+| rover\_wizard/ui/main\_screen.py            |      466 |       15 |      162 |       18 |     95% |225, 282-283, 375, 377-378, 472-\>463, 476-\>463, 484, 490, 513, 522-\>exit, 525-\>exit, 529, 533-\>exit, 556-\>exit, 569-\>exit, 614-\>616, 622, 662, 676, 680-681, 695-\>exit |
 | rover\_wizard/ui/markdown.py                |        4 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/ui/modals.py                  |      125 |        9 |        8 |        3 |     91% |38, 74, 196-202, 217, 220-\>exit |
 | rover\_wizard/ui/monitor.py                 |       74 |        1 |       16 |        2 |     97% |72, 120-\>119 |
@@ -97,13 +95,12 @@
 | rover\_wizard/vehicle/\_\_init\_\_.py       |        0 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/vehicle/boat\_simulator.py    |       47 |        0 |       10 |        0 |    100% |           |
 | rover\_wizard/vehicle/boat\_telemetry.py    |       15 |        0 |        0 |        0 |    100% |           |
-| rover\_wizard/vehicle/demo.py               |       11 |        2 |        4 |        1 |     80% |     17-19 |
+| rover\_wizard/vehicle/demo.py               |       11 |        0 |        4 |        0 |    100% |           |
 | rover\_wizard/vehicle/link.py               |      671 |       23 |      200 |       18 |     95% |450-\>454, 469, 481-482, 510-511, 515-\>489, 539-540, 547-\>exit, 550-551, 594, 651-\>exit, 673-676, 768-770, 890, 922-\>920, 1053, 1061, 1078, 1119, 1131, 1234, 1246 |
 | rover\_wizard/vehicle/rc\_scaling.py        |       24 |        1 |        8 |        1 |     94% |        39 |
 | rover\_wizard/vehicle/rover\_simulator.py   |      525 |        9 |      178 |        8 |     97% |647, 725, 727, 747-748, 772, 775-780, 1111-\>exit, 1246 |
-| rover\_wizard/vehicle/sail\_simulator.py    |       92 |        3 |       30 |        4 |     94% |117-\>119, 140, 150, 190 |
-| rover\_wizard/vehicle/simulator.py          |      515 |      515 |      178 |        0 |      0% |    9-1372 |
-| **TOTAL**                                   | **7427** |  **881** | **1954** |  **223** | **86%** |           |
+| rover\_wizard/vehicle/sail\_simulator.py    |       97 |        0 |       32 |        1 |     99% | 119-\>121 |
+| **TOTAL**                                   | **6791** |  **218** | **1772** |  **203** | **95%** |           |
 
 
 ## Setup coverage badge
