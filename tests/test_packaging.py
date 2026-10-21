@@ -1,5 +1,6 @@
 """The PyInstaller bundle's entry script and spec: the launcher runs the wizard's main(), the spec builds from it."""
 
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -59,3 +60,13 @@ def test_the_ui_starts_with_the_command_line_settings(monkeypatch):
     monkeypatch.setattr(entry, "_is_missing", lambda module: False)
     assert entry.main(["--conn", "udpin:0.0.0.0:14550", "--baud", "57600", "--demo-skid"]) == 0
     assert started == [("udpin:0.0.0.0:14550", 57600, "skid")]
+
+
+def test_every_ui_data_file_is_installed():
+    """pyproject.toml lists the data files an installed package (and the bundle) gets: none may be missing."""
+    root = PACKAGING.parent
+    listed = re.search(r'"rover_wizard\.ui" = \[(.*?)\]', (root / "pyproject.toml").read_text(encoding="utf-8")).group(
+        1
+    )
+    data_files = {path.name for path in (root / "rover_wizard" / "ui").iterdir() if path.suffix in (".json", ".css")}
+    assert data_files <= set(re.findall(r'"([^"]+)"', listed))
