@@ -7,7 +7,7 @@ import time
 from rover_wizard.util import timebase
 from rover_wizard.context import Ctx
 from rover_wizard.util.errors import Cancelled, VehicleError
-from rover_wizard.vehicle.simulator import SimVehicle
+from rover_wizard.vehicle.rover_simulator import SimVehicle
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.session.store import Store
 
@@ -25,9 +25,10 @@ def check(name, cond, info=""):
     assert cond, name + (f"  [{info}]" if info else "")
 
 
-def make(skid=False, wrong=False):
-    """Create a started simulated vehicle plus a wizard context pointed at it, ready for a test to drive."""
-    veh = SimVehicle(skid=skid, wired_wrong=wrong)
+def make(skid=False, wrong=False, simulator=SimVehicle, **options):
+    """Create a started simulated vehicle (a SimVehicle, or e.g. a SimBoat with its own options) plus a wizard context
+    pointed at it, ready for a test to drive."""
+    veh = simulator(skid=skid, wired_wrong=wrong, **options)
     veh.start()
     ctx = Ctx(veh, Store(1, tempfile.mkdtemp()))
     ctx.set_output(log=lambda text: print("     |", text), on_wait=lambda waiting: None, on_values_changed=lambda: None)

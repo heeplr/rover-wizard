@@ -11,7 +11,7 @@ from pymavlink.dialects.v20 import ardupilotmega as mavlink  # noqa: E402
 from rover_wizard.util import timebase  # noqa: E402
 from rover_wizard.context import Ctx  # noqa: E402
 from rover_wizard.util.errors import VehicleError  # noqa: E402
-from rover_wizard.ardupilot_defs import MODES  # noqa: E402
+from rover_wizard.rover_defs import MODES  # noqa: E402
 from rover_wizard.mavlink_defs import GUIDED_VELOCITY_YAW_RATE_TYPEMASK  # noqa: E402
 from rover_wizard.session.store import Store  # noqa: E402
 from rover_wizard.vehicle.link import (  # noqa: E402

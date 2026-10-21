@@ -8,6 +8,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from . import __version__
+from .vehicle.demo import DEMO_VEHICLES
 from .vehicle.link import DEFAULT_BAUD_RATE
 
 if TYPE_CHECKING:
@@ -20,11 +21,11 @@ def _is_missing(module: str) -> bool:
     return importlib.util.find_spec(module) is None
 
 
-def app(conn="", baud=DEFAULT_BAUD_RATE, demo=False, demo_skid=False) -> WizardApp:
-    """textual app factory"""
+def app(conn="", baud=DEFAULT_BAUD_RATE, demo="") -> WizardApp:
+    """textual app factory; `demo` names a simulated vehicle (vehicle.demo.DEMO_VEHICLES)"""
     from .ui.wizard_app import WizardApp
 
-    return WizardApp(conn, baud, demo, demo_skid)
+    return WizardApp(conn, baud, demo)
 
 
 def main(argv=None) -> int:
@@ -35,8 +36,9 @@ def main(argv=None) -> int:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--conn", default="", help="MAVLink connection string, e.g. /dev/ttyACM0, udpin:0.0.0.0:14550")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD_RATE, help="serial baud rate (ignored for UDP/TCP)")
-    parser.add_argument("--demo", action="store_true", help="use a simulated front-wheel-steering rover")
-    parser.add_argument("--demo-skid", action="store_true", help="use a simulated skid-steering rover")
+    for kind, description in DEMO_VEHICLES.items():
+        option = "--demo" if kind == "rover" else f"--demo-{kind}"
+        parser.add_argument(option, dest=f"demo_{kind}", action="store_true", help=f"use a simulated {description}")
     parser.add_argument(
         "-p",
         "--param",
@@ -46,7 +48,8 @@ def main(argv=None) -> int:
         "exit without the UI; repeatable, handled in order",
     )
     args = parser.parse_args(argv)
-    demo = args.demo or args.demo_skid
+    # the simulated vehicle chosen ("" = a real one)
+    demo = next((kind for kind in DEMO_VEHICLES if getattr(args, f"demo_{kind}")), "")
     if args.param:
         if not demo and not args.conn:
             parser.error("--param needs --conn (or --demo)")
@@ -55,11 +58,11 @@ def main(argv=None) -> int:
             return 1
         from .param_cli import run_from_command_line
 
-        return run_from_command_line(args.conn, args.baud, args.param, demo=demo, skid=args.demo_skid)
+        return run_from_command_line(args.conn, args.baud, args.param, demo=demo)
     if _is_missing("textual") or (not demo and _is_missing("pymavlink")):
         print("Missing dependency: pip install textual pymavlink", file=sys.stderr)
         return 1
-    return app(args.conn, args.baud, demo=demo, demo_skid=args.demo_skid).run()
+    return app(args.conn, args.baud, demo=demo).run()
 
 
 if __name__ == "__main__":

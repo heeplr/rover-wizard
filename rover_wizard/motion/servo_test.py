@@ -19,7 +19,7 @@ from typing import Optional
 from ..util import timebase
 from .driving import RcOverrideDriver
 from ..util.errors import VehicleError
-from ..ardupilot_defs import (
+from ..rover_defs import (
     ARMING_CHECK_NONE,
     ARMING_SKIPCHK_ALL,
     AUX_FUNCTION_REFRESH_SECONDS,
@@ -39,6 +39,8 @@ from ..ardupilot_defs import (
     SERVO_OUTPUTS,
 )
 from ..mavlink_defs import ACCEPTED_RESULTS
+from ..boat_defs import MOTOR_TEST_INSTANCE_MAINSAIL, SAIL_FUNCTIONS
+from .sail_test import end_percent, sail_range
 
 MOTOR_TEST_INSTANCE_BY_FUNCTION = {
     SERVO_FUNCTION_THROTTLE: MOTOR_TEST_INSTANCE_THROTTLE,
@@ -288,8 +290,15 @@ class ServoTester:
             self._percent[output] = percent
             return (
                 f"{self._reported_pulse(output)} ({MOTOR_NAMES[instance]} motor test {percent:+.0f}% for "
-                f"{MOTOR_TEST_SECONDS:g} s - arms the vehicle for the test, wheels off the ground!)"
+                f"{MOTOR_TEST_SECONDS:g} s - {self._ctx.prompt('servo_outputs.motor_test_warning')})"
             )
+
+        if function in SAIL_FUNCTIONS:
+            low, high = sail_range(function)
+            percent = _clamp(self._percent.get(output, 0) + direction * PANEL_MOTOR_STEP, low, high)
+            self.run_motor_test(MOTOR_TEST_INSTANCE_MAINSAIL, percent)
+            self._percent[output] = percent
+            return f"{self._reported_pulse(output)} (sail motor test {percent:+.0f}% for {MOTOR_TEST_SECONDS:g} s)"
 
         raise VehicleError(
             f"SERVO{output} is used by function {function}: ArduPilot doesn't move it on command, and "
@@ -419,11 +428,12 @@ class ServoTester:
 
     # ------------------------------------------------------------------ MIN / TRIM / MAX buttons
     def nudge_endpoint(self, function: int, suffix: str, field_key: str, direction: int) -> None:
-        """Change SERVOn_<suffix> by one step immediately and, for the steering servo, show the new position.
+        """Change SERVOn_<suffix> by one step immediately and, for the steering servo and a sail, show the new position.
 
         The steering servo is held at the changed end point (MIN = full left, MAX = full right, TRIM = centre,
-        SERVOn_REVERSED respected). Motor outputs are not driven: a disarmed Rover sends the ESC its TRIM (no pulse
-        if MOT_SAFE_DISARM = 1), and driving to MIN/MAX would mean full power.
+        SERVOn_REVERSED respected); a sail is moved there with the sail motor test. Motor outputs are not driven: a
+        disarmed Rover sends the ESC its TRIM (no pulse if MOT_SAFE_DISARM = 1), and driving to MIN/MAX would mean full
+        power.
         """
         ctx = self._ctx
         output = ctx.output_with_function(function)
@@ -444,6 +454,11 @@ class ServoTester:
             # Stick -1 drives the MIN end, +1 the MAX end; a reversed output swaps them.
             position = {"TRIM": 0.0, "MIN": -1.0, "MAX": 1.0}[suffix] * (-1 if reversed_output else 1)
             self.hold_steering(position)
+        elif function in SAIL_FUNCTIONS:
+            percent = end_percent(function, suffix, ctx.param_int(f"SERVO{output}_REVERSED") == 1)
+            if percent is not None:
+                self.run_motor_test(MOTOR_TEST_INSTANCE_MAINSAIL, percent)
+            ctx.log(f"{names[suffix]} = {new}" + ("" if percent is None else f" (sail moved there: {percent:+.0f}%)"))
         else:
             ctx.log(
                 f"{names[suffix]} = {new} (motor outputs are not driven; while disarmed the ESC receives TRIM, "

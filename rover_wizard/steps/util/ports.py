@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from ...util.errors import VehicleError
-from ...ardupilot_defs import SERIAL_PORTS
+from ...rover_defs import SERIAL_PORTS
 from .probing import snapshot
 
 SERIAL_PORT_CHOICES = [("Not connected to a serial port", 0)] + [(f"SERIAL{port}", port) for port in SERIAL_PORTS]

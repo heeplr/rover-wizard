@@ -11,6 +11,7 @@ from textual.binding import Binding
 from .. import __version__
 from ..context import Ctx
 from ..session.store import DEFAULT_ROOT, Store
+from ..vehicle.demo import demo_vehicle
 from ..vehicle.link import DEFAULT_BAUD_RATE, Vehicle
 from .connect_screen import ConnectScreen
 from .main_screen import MainScreen
@@ -39,15 +40,14 @@ class WizardApp(App):
         self,
         connection_string: str = "",
         baud_rate: int = DEFAULT_BAUD_RATE,
-        demo: bool = False,
-        demo_skid: bool = False,
+        demo: str = "",
     ) -> None:
-        """Startup options from the command line (they pre-fill, or skip, the connect screen)."""
+        """Startup options from the command line (they pre-fill, or skip, the connect screen); `demo` names a
+        simulated vehicle (vehicle.demo.DEMO_VEHICLES), "" connects to a real one."""
         super().__init__()
         self.connection_string = connection_string
         self.baud_rate = baud_rate
         self.demo = demo
-        self.demo_skid = demo_skid
         self.ctx: Optional[Ctx] = None
 
     def on_mount(self) -> None:
@@ -56,12 +56,9 @@ class WizardApp(App):
         self.push_screen(ConnectScreen())
 
     def make_vehicle(self) -> Vehicle:
-        """A real Vehicle, or the simulator for --demo / --demo-skid."""
+        """A real Vehicle, or the simulator for --demo / --demo-skid / --demo-boat / --demo-sailboat."""
         if self.demo:
-            # only needed in demo mode
-            from ..vehicle.simulator import SimVehicle
-
-            return SimVehicle(skid=self.demo_skid, wired_wrong=True)
+            return demo_vehicle(self.demo, wired_wrong=True)
         return Vehicle()
 
     def connected(self, vehicle: Vehicle) -> None:

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import SERIAL_PORTS, SERIAL_PROTOCOL_MAVLINK2, SERIAL_PROTOCOL_NONE
+from ..rover_defs import SERIAL_PORTS, SERIAL_PROTOCOL_MAVLINK2, SERIAL_PROTOCOL_NONE
 from .util.choices import DISABLED_ENABLED_CHOICES
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, bit_field, param_field
 
 REMOTE_ID_OPTION_BITS = [

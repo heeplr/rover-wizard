@@ -6,10 +6,10 @@ import pytest
 
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.flow import StepFlow
-from rover_wizard.ardupilot_defs import SERVO_FUNCTION_GROUND_STEERING
-from rover_wizard.ardupilot_defs import SERVO_FUNCTION_THROTTLE
-from rover_wizard.ardupilot_defs import SERVO_FUNCTION_THROTTLE_LEFT
-from rover_wizard.ardupilot_defs import SERVO_FUNCTION_THROTTLE_RIGHT
+from rover_wizard.rover_defs import SERVO_FUNCTION_GROUND_STEERING
+from rover_wizard.rover_defs import SERVO_FUNCTION_THROTTLE
+from rover_wizard.rover_defs import SERVO_FUNCTION_THROTTLE_LEFT
+from rover_wizard.rover_defs import SERVO_FUNCTION_THROTTLE_RIGHT
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.steps.steering_output import apply_steering_output
 
@@ -298,7 +298,7 @@ def test_first_three_steps_hold_the_moved_settings():
     check("step titles", [BY_ID[s].title for s in keys] == ["Vehicle type", "Steering output", "Motor output"])
     check(
         "vehicle step order",
-        keys["vehicle_type"][:4] == ["vehicle_info", "FRAME_CLASS", "heavy_vehicle", "has_gps"],
+        keys["vehicle_type"][:4] == ["vehicle_info", "FRAME_CLASS", "heavy_vehicle", "has_sails"],
         str(keys["vehicle_type"]),
     )
     check("steering type on top of Steering output", keys["steering_output"][0] == "steer")

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..ardupilot_defs import RC_PWM_NOMINAL_MAX, RC_PWM_NOMINAL_MIN
+from ..rover_defs import RC_PWM_NOMINAL_MAX, RC_PWM_NOMINAL_MIN
 from ..mavlink_defs import UINT16_MAX
 
 # U+2581..U+2588: eight bar heights

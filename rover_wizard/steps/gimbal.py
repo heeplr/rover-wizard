@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import SERIAL_PROTOCOL_GIMBAL, SERIAL_PROTOCOL_MAVLINK2
+from ..rover_defs import SERIAL_PROTOCOL_GIMBAL, SERIAL_PROTOCOL_MAVLINK2
 from .util.choices import COUNT_ONE_TWO_CHOICES
 from .util.ports import (
     DEFAULT_SERIAL_BAUD,
@@ -18,7 +18,7 @@ from .util.ports import (
     port_with_protocol,
 )
 from .util.actions import action_reboot_flight_controller
-from .util.hardware import has
+from .util.rover_hardware import has
 from .util.probing import restore, restore_on_failure, snapshot
 from ..model import Action, Step, param_field, value_field
 

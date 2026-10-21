@@ -1,4 +1,4 @@
-"""Every protocol number in rover_wizard.mavlink_defs (and Rover's flight modes in rover_wizard.ardupilot_defs)
+"""Every protocol number in rover_wizard.mavlink_defs (and Rover's flight modes in rover_wizard.rover_defs)
 against pymavlink's official definitions."""
 
 import pytest
@@ -8,7 +8,7 @@ pytest.importorskip("pymavlink")
 from pymavlink import mavutil  # noqa: E402
 from pymavlink.dialects.v20 import ardupilotmega as mavlink  # noqa: E402
 
-import rover_wizard.ardupilot_defs as ardupilot_defs  # noqa: E402
+import rover_wizard.rover_defs as rover_defs  # noqa: E402
 import rover_wizard.mavlink_defs as mavlink_defs  # noqa: E402
 
 CONSTANTS = {name: getattr(mavlink_defs, name) for name in dir(mavlink_defs) if name.isupper()}
@@ -47,7 +47,7 @@ def test_every_mavlink_name_is_known():
 
 
 def test_rover_flight_modes_match_ardupilot():
-    for name, number in ardupilot_defs.MODES.items():
+    for name, number in rover_defs.MODES.items():
         # pymavlink maps number -> name
         assert mavutil.mode_mapping_rover[number] == name
 

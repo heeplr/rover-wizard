@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, param_field, value_field
 
 TEMPERATURE_TYPE_CHOICES = [

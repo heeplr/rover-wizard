@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, param_field
 
 VISUAL_ODOMETRY_TYPE_CHOICES = [("None", 0), ("MAVLink", 1), ("Intel T265", 2), ("VOXL", 3)]

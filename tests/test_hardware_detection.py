@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from rover_wizard.context import Ctx
-from rover_wizard.vehicle.simulator import SimVehicle
-from rover_wizard.steps.util.hardware import HARDWARE_BY_KEY
+from rover_wizard.vehicle.rover_simulator import SimVehicle
+from rover_wizard.steps.util.rover_hardware import HARDWARE_BY_KEY
 from rover_wizard.session.store import Store
 from rover_wizard.vehicle.link import Vehicle
 

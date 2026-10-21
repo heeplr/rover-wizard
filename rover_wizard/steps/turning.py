@@ -10,6 +10,7 @@ from ..motion.analysis import analyze_turn_run
 from ..util.errors import VehicleError
 from .util.driving import DEFAULT_CIRCLE_DIAMETER_M, LIMIT_SAFETY_FACTOR, who_drives_field
 from ..model import Action, Step, param_field, value_field
+from .util.rover_hardware import is_motorised
 
 # for the turn-rate build-up limit
 STEER_ACCEL_SAFETY_FACTOR = 0.8
@@ -50,7 +51,7 @@ def action_measure_turn_radius(ctx):
     throttle = ctx.number("low_thr", DEFAULT_RADIUS_TEST_THROTTLE_PCT) / 100
     if ctx.value("how_turn", "auto") == "auto":
         ctx.drive.safety_brief(
-            f"The rover drives a full-lock circle to the RIGHT at low speed (stops {circle:.0f} m from "
+            f"The vehicle drives a full-lock circle to the RIGHT at low speed (stops {circle:.0f} m from "
             "its start point at the latest)."
         )
         # Throttle ramps up over 1 s; full right lock from 0.8 s; stop after 1.5 laps (3*pi rad) or the limit.
@@ -83,7 +84,7 @@ def action_measure_max_turn_rate(ctx):
     throttle = ctx.number("turn_thr", 0 if ctx.is_skid() else DEFAULT_MAX_RATE_THROTTLE_PCT) / 100
     if ctx.value("how_turn", "auto") == "auto":
         ctx.drive.safety_brief(
-            "The rover performs a full-lock turn " + ("on the spot (pivot)." if throttle == 0 else "at medium speed.")
+            "The vehicle performs a full-lock turn " + ("on the spot (pivot)." if throttle == 0 else "at medium speed.")
         )
         # Full right lock from 1 s on; throttle ramps up over 1 s (none for a pivot turn).
         samples = ctx.drive.run_open_loop(
@@ -147,4 +148,6 @@ STEP = Step(
         Action("Measure turn radius", action_measure_turn_radius, armed=True),
         Action("Measure max turn rate", action_measure_max_turn_rate, armed=True),
     ],
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

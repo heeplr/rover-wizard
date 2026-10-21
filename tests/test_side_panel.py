@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from rover_wizard.steps.util.hardware import is_accelerometer_fitted, is_gyro_fitted
+from rover_wizard.steps.util.rover_hardware import is_accelerometer_fitted, is_gyro_fitted
 from rover_wizard.ui.monitor import (
     BAR_LEVELS,
     CELLS_PER_CIRCLE,

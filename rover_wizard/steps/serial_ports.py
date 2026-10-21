@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..ardupilot_defs import SERIAL_PORTS, SERIAL_PROTOCOL_NONE
+from ..rover_defs import SERIAL_PORTS, SERIAL_PROTOCOL_NONE
 from .util.ports import SERIAL_BAUD_FULL_CHOICES, baud_label
 from ..model import Step, param_field, value_field
 

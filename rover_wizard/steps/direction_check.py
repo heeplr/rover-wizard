@@ -6,7 +6,7 @@ import math
 
 from ..motion.driving import ramp_up
 from ..util.errors import VehicleError
-from ..ardupilot_defs import (
+from ..rover_defs import (
     SERVO_FUNCTION_GROUND_STEERING,
     SERVO_FUNCTION_THROTTLE,
     SERVO_FUNCTION_THROTTLE_LEFT,
@@ -14,6 +14,7 @@ from ..ardupilot_defs import (
 )
 from .util.driving import DEFAULT_RUNWAY_M, who_drives_field
 from ..model import Action, Step
+from .util.rover_hardware import is_motorised
 
 # [m/s] slower than this, the direction of travel is not trustworthy
 DIRECTION_MIN_SPEED = 0.05
@@ -87,7 +88,7 @@ def action_check_directions(ctx):
         # Just enough throttle to move: a bit above the configured dead-zone (MOT_THR_MIN is in %).
         dead_zone = (ctx.param_value("MOT_THR_MIN", 0) or 0) / 100
         throttle = max(DIRECTION_CREEP_THROTTLE, dead_zone + DIRECTION_THROTTLE_ABOVE_DEADZONE)
-        ctx.drive.safety_brief("The rover creeps forward for ~1.5 s, then drives a gentle right turn for ~2 s.")
+        ctx.drive.safety_brief("The vehicle creeps forward for ~1.5 s, then drives a gentle right turn for ~2 s.")
         # Straight until DIRECTION_RAMP_SECONDS (throttle ramps up over the first second), then right steering at
         # the same throttle.
         samples = ctx.drive.run_open_loop(
@@ -149,4 +150,6 @@ STEP = Step(
     "Direction check (drive + steering)",
     [who_drives_field("how_dir")],
     [Action("Run direction check", action_check_directions, armed=True)],
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

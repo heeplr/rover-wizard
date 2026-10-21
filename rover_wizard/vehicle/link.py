@@ -20,7 +20,7 @@ from collections.abc import Callable
 from ..util import timebase
 from ..util.errors import VehicleError
 from ..util.values import escape_markup
-from ..ardupilot_defs import (
+from ..rover_defs import (
     LEGACY_RELAY_PIN,
     MODES,
     RC_PWM_NOMINAL_MAX,
@@ -589,6 +589,9 @@ class Vehicle:
             self._push_inbox(msg_type, message)
         elif msg_type == "DISTANCE_SENSOR":
             self._store_distance_sensor(message, timestamp)
+        elif msg_type == "NAMED_VALUE_FLOAT":
+            # one per name, so each value can be read on its own (latest(named_value_key(name)))
+            self._store_message(named_value_key(_mavlink_text(message.name)), message, timestamp)
 
     def _handle_status_text(self, message) -> None:
         """Collect a STATUSTEXT; a text sent in pieces (STATUSTEXT.id, MAVLink 2) is joined first, like QGroundControl
@@ -952,7 +955,7 @@ class Vehicle:
         self.command_long(MAV_CMD_COMPONENT_ARM_DISARM, 0, ARM_DISARM_FORCE_MAGIC_NUMBER if force else 0, timeout=3)
 
     def motor_test(self, instance: int, percent: float, seconds: float = 2.0) -> Optional[int]:
-        """Run one output via ArduPilot's motor test (instance: see MOTOR_TEST_INSTANCE_* in ardupilot_defs)."""
+        """Run one output via ArduPilot's motor test (instance: see MOTOR_TEST_INSTANCE_* in rover_defs)."""
         return self.command_long(
             MAV_CMD_DO_MOTOR_TEST,
             instance,
@@ -1178,6 +1181,11 @@ class Vehicle:
             sample.forward_speed = -hud.groundspeed if reversing else hud.groundspeed
 
         return sample
+
+
+def named_value_key(name: str) -> str:
+    """The latest() key of the NAMED_VALUE_FLOAT with this name (e.g. "AppWndSpd")."""
+    return f"NAMED_VALUE_FLOAT:{name}"
 
 
 def read_param_file(path: str) -> dict:

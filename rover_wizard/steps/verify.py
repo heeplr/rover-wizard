@@ -16,6 +16,7 @@ from .util.driving import (
     who_drives_field,
 )
 from ..model import Action, Step, param_field, value_field
+from .util.rover_hardware import is_motorised
 
 DEFAULT_TUNING_ROUNDS = 3
 
@@ -216,7 +217,7 @@ def action_verify_speed_controller(ctx):
     if hold < STEP_MIN_HOLD_SECONDS:
         raise VehicleError("Runway too short for this speed step - lower 'speed step' or increase the runway.")
     ctx.drive.safety_brief(
-        f"The rover follows a speed step to {target:.1f} m/s (Guided mode) and stops, "
+        f"The vehicle follows a speed step to {target:.1f} m/s (Guided mode) and stops, "
         f"up to {int(ctx.number('rounds', DEFAULT_TUNING_ROUNDS))} rounds."
     )
     step_end = STEP_LEAD_SECONDS + hold
@@ -255,7 +256,7 @@ def action_verify_steering_controller(ctx):
         rate = min(rate, CAR_TURN_RATE_FRACTION * speed / radius)
     ctx.log(f"Test: {speed:.1f} m/s, yaw-rate step {math.degrees(rate):.0f} deg/s")
     ctx.drive.safety_brief(
-        "The rover follows a yaw-rate step to the RIGHT (Guided mode) within the circle entered on the Pre-drive step."
+        "The vehicle follows a yaw-rate step to the RIGHT (Guided mode) within the circle entered on the Pre-drive step."
     )
     # Timeline of one round: straight, then turning at `rate`, then straight again.
     _tune_by_step_response(
@@ -295,4 +296,6 @@ STEP = Step(
         Action("Verify & tune SPEED controller", action_verify_speed_controller, armed=True),
         Action("Verify & tune STEERING-RATE controller", action_verify_steering_controller, armed=True),
     ],
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

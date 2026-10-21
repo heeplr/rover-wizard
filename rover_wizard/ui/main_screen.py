@@ -21,12 +21,13 @@ from textual.widgets import Button, Checkbox, Footer, Header, Input, Markdown, R
 from ..context import Ctx
 from ..util.errors import Cancelled, VehicleError
 from ..flow import StepFlow
-from ..ardupilot_defs import MODE_NAMES, RELAYS, SERVO_OUTPUTS
+from ..rover_defs import MODE_NAMES, RELAYS, SERVO_OUTPUTS
 from ..mavlink_defs import GPS_FIX_TYPE_NAMES, SYS_STATUS_MILLIVOLTS_PER_VOLT
 from ..model import Action, Field, parameter_names_text
 from ..steps.util.actions import action_reboot_flight_controller
-from ..steps.util.hardware import has, is_accelerometer_fitted, is_gyro_fitted
+from ..steps.util.rover_hardware import has, is_accelerometer_fitted, is_gyro_fitted
 from ..steps.barometer import barometer_in_use
+from ..steps.steering_output import steering_kind
 from ..steps.relays import toggle_relay
 from .step_catalog import STEPS
 from ..session.store import STEP_DONE, STEP_SKIPPED
@@ -212,7 +213,7 @@ class MainScreen(Screen):
             f"sysid {vehicle.system_id}",
             "[red]ARMED[/]" if vehicle.armed else "disarmed",
             f"mode {MODE_NAMES.get(vehicle.custom_mode, vehicle.custom_mode)}",
-            f"{'SKID' if ctx.is_skid() else 'FRONT-WHEEL'} steering",
+            f"{steering_kind(ctx)} steering",
         ]
         gps = vehicle.latest("GPS_RAW_INT")
         if gps is not None:
@@ -317,7 +318,7 @@ class MainScreen(Screen):
         rows = [
             Horizontal(
                 Static(f"[dim]{step.phase.label}[/dim]  ·  {step.title}", classes="title"),
-                self._help_button(step.title, step.help),
+                self._help_button(step.title, ctx.words(step.help)),
                 classes="trow",
             )
         ]
@@ -329,7 +330,7 @@ class MainScreen(Screen):
                     classes="warn",
                 )
             )
-        rows.append(Markdown(step.intro, parser_factory=markdown_parser, classes="intro"))
+        rows.append(Markdown(ctx.words(step.intro), parser_factory=markdown_parser, classes="intro"))
         # Settings missing on this firmware - unless another field with the same label (the same setting under a
         # different parameter name/unit, e.g. RNGFND1_MAX vs RNGFND1_MAX_CM) is shown instead.
         shown_labels = {field.label for field in step.fields if ctx.is_visible(field)}
@@ -368,7 +369,7 @@ class MainScreen(Screen):
         ctx = self.ctx
         value = ctx.values.get(field.key)
         if field.kind == "choice":
-            options = list(field.choices or [])
+            options = [(ctx.words(label), option_value) for label, option_value in field.choices or []]
             if value is not None and all(option_value != value for _, option_value in options):
                 # vehicle has a value not in our list
                 options.append((f"{format_value(value)} (current)", value))
@@ -379,7 +380,7 @@ class MainScreen(Screen):
             return Select(options, value=value, allow_blank=False, id=widget_id)
         if field.kind == "bool":
             # a Checkbox carries its own label (the row's label column stays empty for it)
-            return Checkbox(field.label, value=bool(value), id=widget_id)
+            return Checkbox(ctx.words(field.label), value=bool(value), id=widget_id)
         if field.kind == "display":
             return Static(
                 escape_markup(str(value)) if value is not None else "(querying ...)",
@@ -390,10 +391,11 @@ class MainScreen(Screen):
 
     def _field_row(self, field: Field) -> Horizontal:
         """Label, widget, unit, inline action buttons, current-value hint and ❓ for one field."""
-        if field.kind == "heading":
-            help_part = self._help_button(field.label, field.help) if field.help else Static("", classes="help")
-            return Horizontal(Static(f"{field.label}:", classes="field-heading"), help_part, classes="frow")
         ctx = self.ctx
+        label = ctx.words(field.label)
+        if field.kind == "heading":
+            help_part = self._help_button(label, ctx.words(field.help)) if field.help else Static("", classes="help")
+            return Horizontal(Static(f"{label}:", classes="field-heading"), help_part, classes="frow")
         widget_id = f"w-{self._render_generation}-{len(self.widgets)}"
         widget = self._field_widget(field, widget_id)
         self.widgets[field.key] = widget
@@ -402,7 +404,7 @@ class MainScreen(Screen):
         name = ctx.vehicle.resolve(field.names(ctx)) if field.param is not None else None
         hint = f"({name} = {format_value(ctx.vehicle.get(name))})" if name else ""
         # A checkbox shows its own label; every other widget gets a label column in front.
-        row = [widget] if field.kind == "bool" else [Static(f"{field.label}:", classes="lbl"), widget]
+        row = [widget] if field.kind == "bool" else [Static(f"{label}:", classes="lbl"), widget]
         if field.unit:
             # right after the value it belongs to, before any buttons
             row.append(Static(field.unit, classes="unit"))
@@ -421,20 +423,20 @@ class MainScreen(Screen):
         # after the buttons: the hint takes the rest of the row, so the buttons stay next to the input
         row.append(Static(hint, classes="hint"))
         if field.help or name:
-            row.append(self._help_button(field.label, self._field_help(field, name)))
+            row.append(self._help_button(label, self._field_help(label, ctx.words(field.help), field.bit, name)))
         else:
             row.append(Static("", classes="help"))
         return Horizontal(*row, classes="frow-tall" if field.kind == "display" else "frow")
 
     @staticmethod
-    def _field_help(field: Field, name: str) -> str:
+    def _field_help(label: str, guidance: str, bit: Optional[int], name: str) -> str:
         """The wizard's own guidance (if any) followed by ArduPilot's description of the parameter (if documented)."""
         official = describe(name) if name else None
-        if official and field.bit is not None:
-            official += f"\n\nThis checkbox is the bit with value {field.bit} of `{name}`."
-        parts = [part for part in (field.help, official) if part]
+        if official and bit is not None:
+            official += f"\n\nThis checkbox is the bit with value {bit} of `{name}`."
+        parts = [part for part in (guidance, official) if part]
         if not parts:
-            return f"**{field.label}**\n\nArduPilot parameter: `{name}` (no description in ArduPilot's documentation)."
+            return f"**{label}**\n\nArduPilot parameter: `{name}` (no description in ArduPilot's documentation)."
         return "\n\n---\n\n".join(parts)
 
     def _action_row(self, position: int, action: Action) -> Horizontal:
@@ -442,7 +444,9 @@ class MainScreen(Screen):
         button_id = f"act-{self._render_generation}-{position}"
         self.actions[button_id] = action
         note = {True: "needs ARMED vehicle", False: "vehicle must be DISARMED"}.get(action.armed, "")
-        help_part = self._help_button(action.label, action.help) if action.help else Static("", classes="help")
+        help_part = (
+            self._help_button(action.label, self.ctx.words(action.help)) if action.help else Static("", classes="help")
+        )
         return Horizontal(
             Button(action.label, id=button_id, classes="act"), help_part, Static(note, classes="dim"), classes="arow"
         )
@@ -533,7 +537,7 @@ class MainScreen(Screen):
                 )
         elif button_id == "b-arm":
             self.app.push_screen(
-                ConfirmScreen("ARM the vehicle? Wheels on the ground, area clear, people away."),
+                ConfirmScreen(ctx.prompt("drive.arm_confirm")),
                 lambda yes: yes and self.run_job(self._arm, "Arm"),
             )
         elif button_id == "b-disarm":

@@ -10,7 +10,7 @@ from rover_wizard.steps.compass import (
     power_sequence,
     primary_compass_slot,
 )
-from rover_wizard.vehicle.simulator import SimVehicle
+from rover_wizard.vehicle.rover_simulator import SimVehicle
 
 from util.helpers import BY_ID, apply, enter, make, wait_until
 

@@ -58,4 +58,4 @@ def test_the_ui_starts_with_the_command_line_settings(monkeypatch):
     monkeypatch.setattr("rover_wizard.ui.wizard_app.WizardApp", FakeApp)
     monkeypatch.setattr(entry, "_is_missing", lambda module: False)
     assert entry.main(["--conn", "udpin:0.0.0.0:14550", "--baud", "57600", "--demo-skid"]) == 0
-    assert started == [("udpin:0.0.0.0:14550", 57600, True, True)]
+    assert started == [("udpin:0.0.0.0:14550", 57600, "skid")]

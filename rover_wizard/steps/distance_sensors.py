@@ -12,7 +12,7 @@ selection in ArduPilot's AP_RangeFinder.cpp / AP_Proximity.cpp.
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import RANGEFINDER_INSTANCES, SERIAL_PROTOCOL_LIDAR360, SERIAL_PROTOCOL_RANGEFINDER
+from ..rover_defs import RANGEFINDER_INSTANCES, SERIAL_PROTOCOL_LIDAR360, SERIAL_PROTOCOL_RANGEFINDER
 from ..util.timebase import now
 from .util.ports import (
     COMMON_PROBE_BAUDS,
@@ -30,7 +30,7 @@ from .util.ports import (
 )
 from .util.probing import LIVE_DISPLAY_SECONDS, restore, restore_on_failure, snapshot
 from .util.actions import action_reboot_flight_controller
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, bit_field, param_field, value_field
 
 # RNGFNDn_TYPE values and names from ArduPilot's parameter definitions (simulator-only types left out).

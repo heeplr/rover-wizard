@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import RC_OPTION_EKF_SOURCE_SET
+from ..rover_defs import RC_OPTION_EKF_SOURCE_SET
 from ..mavlink_defs import ACCEPTED_RESULTS
 from .util.outputs import RC_SWITCH_CHOICES, assign_rc_switch, rc_channel_with_option
 from .util.choices import DISABLED_ENABLED_CHOICES
-from .util.hardware import GPS_TYPE_PARAMETERS, has
+from .util.rover_hardware import GPS_TYPE_PARAMETERS, has
 from ..model import Action, Step, bit_field, heading_field, param_field, value_field
 
 # EK3_SRCn_* values (AP_NavEKF_Source.cpp)

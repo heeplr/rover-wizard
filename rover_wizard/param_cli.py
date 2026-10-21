@@ -179,8 +179,7 @@ def run_from_command_line(
     connection: str,
     baud_rate: int,
     arguments: list,
-    demo: bool = False,
-    skid: bool = False,
+    demo: str = "",
     out: Optional[TextIO] = None,
     err: Optional[TextIO] = None,
 ) -> int:
@@ -200,9 +199,9 @@ def run_from_command_line(
         return EXIT_USAGE
 
     if demo:
-        from .vehicle.simulator import SimVehicle
+        from .vehicle.demo import demo_vehicle
 
-        vehicle = SimVehicle(skid=skid)
+        vehicle = demo_vehicle(demo)
     else:
         from .vehicle.link import Vehicle
 

@@ -6,7 +6,7 @@ from ..util import timebase
 from ..util.errors import VehicleError
 from ..util.values import format_value
 from .util.probing import LIVE_DISPLAY_SECONDS
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, bit_field, heading_field, param_field
 
 FAILSAFE_ACTION_CHOICES = [

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import rover_wizard.ardupilot_defs as ardupilot_defs
+import rover_wizard.rover_defs as rover_defs
 from rover_wizard.ui.param_docs import DOCS_FILE, is_documented
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.steps.util.outputs import SPRAYER_SERVO_FUNCTIONS
@@ -99,24 +99,22 @@ def test_numbers_the_code_writes_are_arduPilots_values(metadata):
     options = metadata["RC1_OPTION"]["Values"]
     protocols = metadata["SERIAL1_PROTOCOL"]["Values"]
     servo_functions = [
-        ardupilot_defs.SERVO_FUNCTION_GPIO,
-        ardupilot_defs.SERVO_FUNCTION_RC_PASSTHRU,
-        ardupilot_defs.SERVO_FUNCTION_GROUND_STEERING,
-        ardupilot_defs.SERVO_FUNCTION_THROTTLE,
-        ardupilot_defs.SERVO_FUNCTION_THROTTLE_LEFT,
-        ardupilot_defs.SERVO_FUNCTION_THROTTLE_RIGHT,
-        ardupilot_defs.SERVO_FUNCTION_GRIPPER,
+        rover_defs.SERVO_FUNCTION_GPIO,
+        rover_defs.SERVO_FUNCTION_RC_PASSTHRU,
+        rover_defs.SERVO_FUNCTION_GROUND_STEERING,
+        rover_defs.SERVO_FUNCTION_THROTTLE,
+        rover_defs.SERVO_FUNCTION_THROTTLE_LEFT,
+        rover_defs.SERVO_FUNCTION_THROTTLE_RIGHT,
+        rover_defs.SERVO_FUNCTION_GRIPPER,
         *SPRAYER_SERVO_FUNCTIONS.values(),
-        *(ardupilot_defs.SERVO_FUNCTION_RCIN_BASE + channel for channel in range(1, 17)),
+        *(rover_defs.SERVO_FUNCTION_RCIN_BASE + channel for channel in range(1, 17)),
     ]
     rc_options = [
-        *ardupilot_defs.RC_OPTION_RELAY.values(),
-        ardupilot_defs.RC_OPTION_GRIPPER,
-        ardupilot_defs.RC_OPTION_EKF_SOURCE_SET,
+        *rover_defs.RC_OPTION_RELAY.values(),
+        rover_defs.RC_OPTION_GRIPPER,
+        rover_defs.RC_OPTION_EKF_SOURCE_SET,
     ]
-    serial_protocols = [
-        getattr(ardupilot_defs, name) for name in dir(ardupilot_defs) if name.startswith("SERIAL_PROTOCOL_")
-    ]
+    serial_protocols = [getattr(rover_defs, name) for name in dir(rover_defs) if name.startswith("SERIAL_PROTOCOL_")]
     assert [f for f in servo_functions if str(f) not in functions] == []
     assert [o for o in rc_options if str(o) not in options] == []
     assert [p for p in serial_protocols if str(p) not in protocols] == []

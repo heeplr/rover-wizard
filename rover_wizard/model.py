@@ -11,6 +11,27 @@ from typing import Any, Optional
 from collections.abc import Callable
 
 
+class Wording(str):
+    """A text for land vehicles that also carries its wording for boats (ui/wizard_text_water.json).
+
+    It *is* the land text, so code that doesn't care about the difference uses it like any string; worded() picks
+    the variant for the vehicle at hand.
+    """
+
+    water: str
+
+    def __new__(cls, land: str, water: str) -> "Wording":
+        """The land text, with `water` for boats."""
+        text = super().__new__(cls, land)
+        text.water = water
+        return text
+
+
+def worded(text: str, boat: bool) -> str:
+    """The wording of `text` for a boat or a land vehicle (plain strings read the same on both)."""
+    return text.water if boat and isinstance(text, Wording) else text
+
+
 @dataclass
 class Field:
     """One form field on a wizard step - either bound to an ArduPilot parameter (built with param_field()) or a plain

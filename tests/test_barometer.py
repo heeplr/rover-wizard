@@ -3,11 +3,11 @@ looked for at boot, and the live pressure readout."""
 
 import pytest
 
-from rover_wizard.ardupilot_defs import BARO_DEVICE_TYPE_BMP280, BARO_PROBE_EXT_BMP280, DEVICE_BUS_TYPE_I2C
+from rover_wizard.rover_defs import BARO_DEVICE_TYPE_BMP280, BARO_PROBE_EXT_BMP280, DEVICE_BUS_TYPE_I2C
 from rover_wizard.steps.barometer import decode_device_id, describe_device
 from rover_wizard.steps.util.actions import action_reboot_flight_controller
 from rover_wizard.ui.monitor import barometer_text
-from rover_wizard.vehicle.simulator import INTERNAL_BAROMETER_DEVID, make_device_id
+from rover_wizard.vehicle.rover_simulator import INTERNAL_BAROMETER_DEVID, make_device_id
 
 from util.helpers import BY_ID, act, apply, enter, make
 

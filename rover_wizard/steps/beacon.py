@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import SERIAL_PROTOCOL_BEACON
+from ..rover_defs import SERIAL_PROTOCOL_BEACON
 from .util.ports import SERIAL_PORT_CHOICES, chosen_serial_port, configure_serial, ensure_port_free, port_with_protocol
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, param_field, value_field
 
 BEACON_TYPE_CHOICES = [("None", 0), ("Pozyx", 1), ("Marvelmind", 2), ("Nooploop", 3)]

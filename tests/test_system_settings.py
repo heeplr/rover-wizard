@@ -7,7 +7,7 @@ from rover_wizard.util import timebase
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.flow import StepFlow
 from rover_wizard.util.rotation import ORIENTATION_CHOICES
-from rover_wizard.vehicle.simulator import SimVehicle
+from rover_wizard.vehicle.rover_simulator import SimVehicle
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.steps.gimbal import action_probe_gimbal
 from rover_wizard.steps.compass import action_probe_compass_orientation

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..ardupilot_defs import (
+from ..rover_defs import (
     BARO_DEVICE_TYPES,
     BARO_EXT_BUS_ALL,
     BARO_INSTANCES,

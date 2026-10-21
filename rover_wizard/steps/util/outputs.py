@@ -4,8 +4,9 @@ direction / end-point fields."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 from ...util.errors import VehicleError
-from ...ardupilot_defs import (
+from ...rover_defs import (
     RC_CHANNELS,
     SERVO_FUNCTION_GPIO,
     SERVO_FUNCTION_GROUND_STEERING,
@@ -50,8 +51,8 @@ class OutputRole:
     tag: str
     # shown to the pilot
     label: str
-    # True: only used on skid-steering vehicles; False: only on front-wheel steering
-    skid: bool
+    # True: only used on skid-steering vehicles; False: only on front-wheel steering; None: on both (e.g. a sail)
+    skid: Optional[bool] = None
 
 
 def servo_role_field(
@@ -65,6 +66,8 @@ def servo_role_field(
 
     def does_fit(ctx):
         """Whether this role belongs to the vehicle's steering type."""
+        if role.skid is None:
+            return True
         front_wheel = is_front_wheel_selected(ctx) if is_front_wheel_selected else not ctx.is_skid()
         return front_wheel != role.skid
 
@@ -84,12 +87,13 @@ def _endpoint_button(role: OutputRole, suffix: str, key: str, direction: int) ->
         lambda ctx: ctx.servos.nudge_endpoint(role.function, suffix, key, direction),
         armed=False,
         help=f"Change {suffix} by 10 us immediately (written to the vehicle); the steering servo is "
-        "moved there (disarmed), motor outputs are not driven.",
+        "moved there (disarmed), a sail with the sail motor test; motor outputs are not driven.",
     )
 
 
 def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
-    """For each role: a 'Reverse output' checkbox and its MIN/MAX/TRIM pulse widths (see servo_role_field)."""
+    """For each role: a 'Reverse output' checkbox and its MIN/MAX/TRIM pulse widths (see servo_role_field); their help
+    comes from wizard_text.json ("<step>.rev_<tag>", "<step>.min_<tag>", ...), as each role needs its own."""
     fields = []
     for role in roles:
         fields.append(
@@ -100,8 +104,6 @@ def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
                 "Reverse output",
                 is_front_wheel_selected=is_front_wheel_selected,
                 kind="bool",
-                help="Use the *Test* buttons above. If the wheel turns backwards / the "
-                "steering servo moves the wrong way, check this box.",
             )
         )
         for suffix in ("MIN", "MAX", "TRIM"):
@@ -118,10 +120,6 @@ def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
                     unit="us",
                     min_value=SERVO_PWM_RANGE[0],
                     max_value=SERVO_PWM_RANGE[1],
-                    help="Servo end points / neutral. For a steering servo set MIN/MAX to the "
-                    "mechanical end stops (no binding) and TRIM so the wheels point "
-                    "straight. For an ESC keep 1000/2000 and 1500 unless your ESC needs "
-                    "something else.",
                 )
             )
     return fields

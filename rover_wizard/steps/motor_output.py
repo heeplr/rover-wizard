@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import (
+from ..rover_defs import (
     MOTOR_TEST_INSTANCE_THROTTLE,
     MOTOR_TEST_INSTANCE_THROTTLE_LEFT,
     MOTOR_TEST_INSTANCE_THROTTLE_RIGHT,
@@ -22,6 +22,7 @@ from ..motion.servo_test import (
 from ..util.timebase import now
 from .util.outputs import OutputRole, assign_rover_outputs, build_servo_direction_fields
 from ..model import Action, Step, param_field, value_field
+from .util.rover_hardware import is_motorised
 
 DEFAULT_THROTTLE_OUTPUT = 3
 
@@ -174,13 +175,13 @@ def action_find_throttle_deadzone(ctx):
     """
     instance = MOTOR_TEST_INSTANCE_THROTTLE_LEFT if ctx.is_skid() else MOTOR_TEST_INSTANCE_THROTTLE
     function = SERVO_FUNCTION_THROTTLE_LEFT if ctx.is_skid() else SERVO_FUNCTION_THROTTLE
-    if not ctx.confirm("Driven wheels off the ground and free to spin? Start the motor ramp?"):
+    if not ctx.confirm(ctx.prompt("motor_output.ramp_start")):
         ctx.log("Cancelled - no changes made.")
         return
     original = ctx.param_value("MOT_THR_MIN", 0)
     ctx.set_param("MOT_THR_MIN", 0)
     found = None
-    ctx.begin_wait("Watch the wheel: press Continue the moment it starts to turn.")
+    ctx.begin_wait(ctx.prompt("motor_output.ramp_watch"))
     try:
         # The first step arms the vehicle for the motor test; later steps continue the running test.
         with arming_checks_skipped(ctx.vehicle):
@@ -210,11 +211,11 @@ def action_find_throttle_deadzone(ctx):
                     ctx.log(f"Motor power {percent}% - output not reported")
     finally:
         ctx.end_wait()
-        # stop the wheel now, not when the test lapses
+        # stop the motor now, not when the test lapses
         ctx.vehicle.motor_test(instance, 0, MOTOR_TEST_STOP_SECONDS)
         ctx.set_param("MOT_THR_MIN", original)
     if found is not None:
-        ctx.log(f"Wheel started to move at about {found}% -> suggested MOT_THR_MIN = {found}")
+        ctx.log(ctx.prompt("motor_output.ramp_found").format(percent=found))
         ctx.set_values(MOT_THR_MIN=found)
         ctx.log("Press 'Apply' to write it.")
     else:
@@ -318,4 +319,6 @@ STEP = Step(
     ],
     [],
     on_apply=apply_motor_output,
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

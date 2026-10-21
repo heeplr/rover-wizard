@@ -8,14 +8,14 @@ keeps GPS 1 on the lower-numbered port and refuses ports that another device alr
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import SERIAL_PORTS, SERIAL_PROTOCOL_GPS, SERIAL_PROTOCOL_NONE
+from ..rover_defs import SERIAL_PORTS, SERIAL_PROTOCOL_GPS, SERIAL_PROTOCOL_NONE
 from ..mavlink_defs import GPS_FIX_TYPE_NAMES, GPS_RAW_INT_EPH_SCALE
 from ..util.timebase import now
 from .util.choices import COUNT_ONE_TWO_CHOICES
 from .util.probing import LIVE_DISPLAY_SECONDS, restore_on_failure
 from .util.ports import SERIAL_BAUD_FULL_CHOICES
 from .util.actions import action_reboot_flight_controller
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, bit_field, heading_field, param_field, value_field
 
 GPS_TYPE_AUTO = 1
@@ -46,6 +46,18 @@ GPS_CHECK_BITS = [
     (32, "Position drift"),
     (64, "Vertical speed"),
     (128, "Horizontal speed"),
+]
+
+# GPS_NAVFILTER: the receiver's dynamic model (u-blox); boats: "Sea" assumes sea level
+GPS_NAVFILTER_CHOICES = [
+    ("Portable", 0),
+    ("Stationary", 2),
+    ("Pedestrian", 3),
+    ("Automotive", 4),
+    ("Sea", 5),
+    ("Airborne < 1 g", 6),
+    ("Airborne < 2 g", 7),
+    ("Airborne < 4 g (ArduPilot's default)", 8),
 ]
 
 GPS_AUTO_SWITCH_CHOICES = [("Use primary", 0), ("Use best", 1), ("Blend", 2), ("Use primary if 3D fix or better", 4)]
@@ -283,6 +295,13 @@ STEP = Step(
             kind="choice",
             choices=GPS_PRIMARY_CHOICES,
             when=lambda ctx: gps_count(ctx) == 2,
+        ),
+        param_field(
+            "GPS_NAVFILTER",
+            "Receiver's motion model",
+            kind="choice",
+            choices=GPS_NAVFILTER_CHOICES,
+            when=lambda ctx: ctx.is_boat(),
         ),
     ]
     + [heading_field("gps_checks", "GPS checks before the EKF uses the GPS")]

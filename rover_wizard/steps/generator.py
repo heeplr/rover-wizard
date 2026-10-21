@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import SERIAL_PROTOCOL_GENERATOR
+from ..rover_defs import SERIAL_PROTOCOL_GENERATOR
 from .util.ports import (
     DEFAULT_SERIAL_BAUD,
     SERIAL_BAUD_FULL_CHOICES,
@@ -13,7 +13,7 @@ from .util.ports import (
     ensure_port_free,
     port_with_protocol,
 )
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, bit_field, param_field, value_field
 
 GENERATOR_TYPE_CHOICES = [

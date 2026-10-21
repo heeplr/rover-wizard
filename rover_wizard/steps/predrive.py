@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..ardupilot_defs import FS_OPTIONS_ACTIVE_IN_HOLD, MODE_NAMES, MODES
+from ..rover_defs import FS_OPTIONS_ACTIVE_IN_HOLD, MODE_NAMES, MODES
 from ..mavlink_defs import (
     EKF_ATTITUDE,
     EKF_POS_HORIZ_ABS,
@@ -14,7 +14,7 @@ from ..mavlink_defs import (
 )
 from ..util.timebase import now
 from .util.driving import DEFAULT_CIRCLE_DIAMETER_M, DEFAULT_RUNWAY_M
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, value_field
 
 PREDRIVE_MIN_SATELLITES = 8
@@ -120,7 +120,7 @@ def action_run_predrive_checks(ctx):
             f"GUID_TIMEOUT = {guided_timeout:g} s: needs {MIN_GUIDED_TIMEOUT_SECONDS:g} .. "
             f"{MAX_COMMAND_TIMEOUT_SECONDS:g} s (set 3 s, Ctrl+P)",
         )
-    check(vehicle.armed, "vehicle is ARMED", "vehicle is disarmed - use the Arm button (wheels on ground, area clear)")
+    check(vehicle.armed, "vehicle is ARMED", ctx.prompt("predrive.not_armed"))
     ctx.log(
         "Everything looks fine - continue with the next step." if all_ok else "Fix the FAIL items above before driving."
     )
@@ -165,9 +165,7 @@ def action_test_rc_failsafe(ctx):
         vehicle.set_mode("MANUAL")
     wait = float(ctx.param_value("FS_TIMEOUT", 0) or 0) + FAILSAFE_MESSAGE_MARGIN_SECONDS
     marker = vehicle.status_text_marker()
-    ctx.pause(
-        "Vehicle stationary (or wheels off the ground). Switch your TRANSMITTER OFF, wait ~3 s, then press " "Continue."
-    )
+    ctx.pause(ctx.prompt("predrive.rc_failsafe_start"))
     started = _wait_for_failsafe_text(ctx, marker, cleared=False, seconds=wait)
     ctx.log(
         ("OK   failsafe reported: " + "; ".join(started) + f" - mode now {_mode_name(ctx)}")

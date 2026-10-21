@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ..ardupilot_defs import RC_CHANNELS, SERVO_FUNCTION_GPIO, SERVO_FUNCTION_RCIN_BASE, SERVO_OUTPUTS
+from ..rover_defs import RC_CHANNELS, SERVO_FUNCTION_GPIO, SERVO_FUNCTION_RCIN_BASE, SERVO_OUTPUTS
 from .util.outputs import AUX_EDITABLE_FUNCTIONS, SERVO_OUTPUT_CHOICES, describe_function, mode_channel, output_function
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 AUX_FUNCTION_CHOICES = (

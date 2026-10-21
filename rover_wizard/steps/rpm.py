@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ..ardupilot_defs import RPM_SENSORS, SERVO_FUNCTION_GPIO
+from ..rover_defs import RPM_SENSORS, SERVO_FUNCTION_GPIO
 from .util.probing import LIVE_DISPLAY_SECONDS
 from .util.outputs import RELAY_PIN_OUTPUT_CHOICES, assign_output_function
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 RPM_TYPE_CHOICES = [

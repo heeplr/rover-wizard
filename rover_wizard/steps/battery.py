@@ -8,7 +8,7 @@ from ..util.errors import VehicleError
 from ..mavlink_defs import SYS_STATUS_CENTIAMPS_PER_AMP, SYS_STATUS_MILLIVOLTS_PER_VOLT
 from ..util.timebase import now
 from ..util.values import format_value
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 BATTERY_MONITOR_CHOICES = [

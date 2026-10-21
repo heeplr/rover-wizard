@@ -11,7 +11,7 @@ import pytest
 from rover_wizard.util import timebase
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.context import Ctx
-from rover_wizard.ardupilot_defs import (
+from rover_wizard.rover_defs import (
     MODES,
     MOTOR_TEST_INSTANCE_THROTTLE,
     SERVO_FUNCTION_GROUND_STEERING,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import RC_OPTION_GRIPPER, SERVO_FUNCTION_GRIPPER
+from ..rover_defs import RC_OPTION_GRIPPER, SERVO_FUNCTION_GRIPPER
 from ..mavlink_defs import ACCEPTED_RESULTS, GRIPPER_ACTION_GRAB, GRIPPER_ACTION_RELEASE
 from .util.choices import DISABLED_ENABLED_CHOICES
 from .util.outputs import (
@@ -13,7 +13,7 @@ from .util.outputs import (
     assign_rc_switch,
     rc_channel_with_option,
 )
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 GRIPPER_TYPE_CHOICES = [("None", 0), ("Servo", 1), ("EPM (electro-permanent magnet)", 2)]

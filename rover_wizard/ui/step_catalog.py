@@ -2,18 +2,18 @@
 
 The steps themselves (fields, actions, what Apply writes) live in rover_wizard.steps, one module per step. This
 catalog puts them in the wizard's order and attaches the text the pilot will read - each step's introduction and help -
-from wizard_text.json.
+from wizard_text.json (rover_wizard.texts words them for land vehicles or boats).
 """
 
 from __future__ import annotations
-
-import json
-import os
 
 from ..steps import (
     vehicle_type,
     steering_output,
     motor_output,
+    torqeedo,
+    sails,
+    wind_vane,
     orientation,
     gps,
     accel,
@@ -22,6 +22,7 @@ from ..steps import (
     rc,
     wheel_encoders,
     distance_sensors,
+    depth_sounder,
     gimbal,
     servo_outputs,
     relays,
@@ -48,12 +49,12 @@ from ..steps import (
     gains,
     verify,
     navigation,
+    boat_loiter,
     log_settings,
     final,
 )
 from ..model import Phase
-
-TEXT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wizard_text.json")
+from ..texts import all_texts
 
 # The wizard's phases and their steps, in order. Each step module defines one step as STEP.
 # The battery monitor comes before the compass: compass-motor compensation needs its current measurement.
@@ -66,6 +67,9 @@ PHASES = (
             vehicle_type,
             steering_output,
             motor_output,
+            torqeedo,
+            sails,
+            wind_vane,
             battery,
             orientation,
             gps,
@@ -75,6 +79,7 @@ PHASES = (
             rc,
             wheel_encoders,
             distance_sensors,
+            depth_sounder,
             gimbal,
             servo_outputs,
             relays,
@@ -100,18 +105,10 @@ PHASES = (
         2,
         "Drive & tune (ARMED, open space)",
         drives=True,
-        steps=(predrive, direction_check, top_speed, turning, gains, verify, navigation),
+        steps=(predrive, direction_check, top_speed, turning, gains, verify, navigation, boat_loiter),
     ),
     Phase(3, "Wrap-up", drives=False, steps=(final,)),
 )
-
-
-def _load_texts() -> dict:
-    """Step introductions/help, field help ("step id.field key"), action-button help ("step id.button label") and
-    briefings of probes ("step id.field key" of the field the Probe button sits in) and of other runs that move the
-    vehicle ("step id.button label")."""
-    with open(TEXT_FILE, encoding="utf-8") as text_file:
-        return json.load(text_file)
 
 
 def _in_phase(step, phase: Phase, texts: dict):
@@ -130,5 +127,4 @@ def _in_phase(step, phase: Phase, texts: dict):
     return step
 
 
-_TEXTS = _load_texts()
-STEPS = [_in_phase(module.STEP, phase, _TEXTS) for phase in PHASES for module in phase.steps]
+STEPS = [_in_phase(module.STEP, phase, all_texts()) for phase in PHASES for module in phase.steps]

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..ardupilot_defs import RC_PWM_NOMINAL_MAX, RC_PWM_NOMINAL_MIN, RC_PWM_NOMINAL_TRIM
+from ..rover_defs import RC_PWM_NOMINAL_MAX, RC_PWM_NOMINAL_MIN, RC_PWM_NOMINAL_TRIM
 
 
 @dataclass(frozen=True)

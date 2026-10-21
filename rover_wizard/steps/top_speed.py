@@ -13,6 +13,7 @@ from .util.driving import (
     who_drives_field,
 )
 from ..model import Action, Step, param_field
+from .util.rover_hardware import is_motorised
 
 # decel/accel ratio inside this -> leave ATC_DECEL_MAX = 0 ("same as accel")
 DECEL_SIMILAR_RANGE = (0.7, 1.3)
@@ -31,7 +32,7 @@ def action_measure_top_speed(ctx):
     runway = ctx.number("runway", DEFAULT_RUNWAY_M)
     if ctx.value("how_speed", "auto") == "auto":
         ctx.drive.safety_brief(
-            f"The rover accelerates straight ahead to FULL throttle (max "
+            f"The vehicle accelerates straight ahead to FULL throttle (max "
             f"{runway * RUNWAY_USE_FRACTION:.0f} m), then coasts to a stop."
         )
         # Throttle ramps 0 -> 100 % in 1.5 s (no wheelspin jolt); stop once speed has been flat for 2 s (after
@@ -82,4 +83,6 @@ STEP = Step(
         param_field("ATC_DECEL_MAX", "Max deceleration (0 = same)", unit="m/s/s"),
     ],
     [Action("Measure top speed & acceleration", action_measure_top_speed, armed=True)],
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..motion.driving import ramp_up
 from ..motion.analysis import analyze_speed_feedforward, analyze_steering_feedforward
 from ..util.errors import VehicleError
-from ..ardupilot_defs import RC_OPTION_SCRIPTING_1
+from ..rover_defs import RC_OPTION_SCRIPTING_1
 from .util.driving import (
     DEFAULT_CIRCLE_DIAMETER_M,
     DEFAULT_RUNWAY_M,
@@ -18,6 +18,7 @@ from .util.driving import (
 from .util.outputs import assign_rc_switch
 from .scripting import STEP as SCRIPTING_STEP
 from ..model import Action, Step, param_field, value_field
+from .util.rover_hardware import is_motorised
 
 MIN_STEADY_TURN_SAMPLES = 15
 
@@ -53,7 +54,7 @@ def action_measure_steering_feedforward(ctx):
     # % -> 0..1
     throttle = ctx.number("ff_thr", 0 if ctx.is_skid() else DEFAULT_FEEDFORWARD_THROTTLE_PCT) / 100
     if ctx.value("how_gain", "auto") == "auto":
-        ctx.drive.safety_brief("The rover drives circles to the RIGHT with 40% and 70% steering for ~6 s each.")
+        ctx.drive.safety_brief("The vehicle drives circles to the RIGHT with 40% and 70% steering for ~6 s each.")
         # 0-0.5 s straight, 0.5-7 s at 40 % steering, 7-14 s at 70 %: two steady operating points.
         samples = ctx.drive.run_open_loop(
             lambda t: (
@@ -112,7 +113,7 @@ def action_measure_speed_feedforward(ctx):
     throttle = ctx.number("cruise_pct", DEFAULT_CRUISE_TEST_THROTTLE_PCT) / 100
     if ctx.value("how_gain", "auto") == "auto":
         ctx.drive.safety_brief(
-            f"The rover drives straight at {throttle:.0%} throttle until the speed is steady "
+            f"The vehicle drives straight at {throttle:.0%} throttle until the speed is steady "
             f"(max {runway * RUNWAY_USE_FRACTION:.0f} m)."
         )
         # Throttle ramps up over 1 s; stop once speed has been flat (±5 %) for 3 s, after at least 7 s.
@@ -220,4 +221,6 @@ STEP = Step(
         Action("Measure cruise & speed gains", action_measure_speed_feedforward, armed=True),
     ],
     on_apply=apply_gains,
+    # needs a motor: a vehicle with nothing but sails skips it
+    applies=is_motorised,
 )

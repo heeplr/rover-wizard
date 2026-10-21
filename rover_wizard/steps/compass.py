@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from ..ardupilot_defs import (
+from ..rover_defs import (
     COMPASS_MOTCT_CURRENT,
     COMPASS_MOTCT_DISABLED,
     COMPASS_MOTCT_THROTTLE,
@@ -45,7 +45,7 @@ from .util.compass_slots import (
     slot_name,
     use_name,
 )
-from .util.hardware import has
+from .util.rover_hardware import has, is_motorised
 from .util.probing import (
     CALIBRATION_POLL_SECONDS,
     IMU_MIN_SAMPLES,
@@ -525,6 +525,11 @@ def _run_motors(ctx, motors: tuple, max_percent: float) -> list:
     return runs
 
 
+def _compensates_motor(ctx) -> bool:
+    """Motor interference can be measured: there is a motor, and the battery monitor measures its current."""
+    return is_motorised(ctx) and measures_current(ctx)
+
+
 def action_measure_compass_motor_interference(ctx):
     """Measure the compass field per amp of motor current and propose COMPASS_MOTCT = 2 with COMPASS_MOTn_X/Y/Z."""
     if not measures_current(ctx):
@@ -541,7 +546,7 @@ def action_measure_compass_motor_interference(ctx):
     if not all(ctx.output_with_function(function) for _, function in motors):
         raise VehicleError("Assign the motor output(s) on the Motor output step first.")
 
-    if not ctx.confirm("Driven wheels off the ground, battery connected? Start the compass-motor measurement?"):
+    if not ctx.confirm(ctx.prompt("compass.compassmot_start")):
         ctx.log("Cancelled - no changes made.")
         return
 
@@ -560,7 +565,7 @@ def action_measure_compass_motor_interference(ctx):
     share = strength * rise / earth * PERCENT if earth else 0.0
     ctx.log(
         f"Interference: {strength:.1f} mGauss per A - {share:.0f} % of the Earth's field at {rise:.1f} A "
-        "(more while driving: the wheels are unloaded now)."
+        + ctx.prompt("compass.compassmot_load_note")
     )
     if share > STRONG_INTERFERENCE_PCT:
         ctx.log(
@@ -599,7 +604,7 @@ def motor_compensation_fields() -> list:
             "Motor interference compensation",
             kind="choice",
             choices=COMPASS_MOTCT_CHOICES,
-            when=measures_current,
+            when=_compensates_motor,
         ),
         value_field(
             "compassmot_power",
@@ -608,7 +613,7 @@ def motor_compensation_fields() -> list:
             default=DEFAULT_COMPASSMOT_POWER_PCT,
             min_value=COMPASSMOT_POWER_MIN_PCT,
             max_value=COMPASSMOT_POWER_MAX_PCT,
-            when=measures_current,
+            when=_compensates_motor,
         ),
     ] + [
         param_field(
@@ -616,7 +621,7 @@ def motor_compensation_fields() -> list:
             f"Motor compensation {axis}",
             key=f"mot_{axis.lower()}",
             unit="mGauss/A",
-            when=measures_current,
+            when=_compensates_motor,
         )
         for axis in "XYZ"
     ]
@@ -687,7 +692,7 @@ STEP = Step(
             "Measure compass-motor interference",
             action_measure_compass_motor_interference,
             armed=False,
-            when=measures_current,
+            when=_compensates_motor,
         ),
     ],
     applies=has("has_compass"),

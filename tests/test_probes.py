@@ -1,7 +1,7 @@
 """Automatic probes and calibrations that reboot or need the pilot's confirmation."""
 
 from rover_wizard.util.rotation import ORIENTATION_CHOICES
-from rover_wizard.vehicle.simulator import SimVehicle
+from rover_wizard.vehicle.rover_simulator import SimVehicle
 from rover_wizard.steps.gps import action_probe_gps_type
 from rover_wizard.steps.orientation import action_probe_orientation
 from rover_wizard.steps.gps import GPS_TYPE_AUTO

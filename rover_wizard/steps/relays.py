@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..util.errors import VehicleError
-from ..ardupilot_defs import LEGACY_RELAY_PIN, RC_OPTION_RELAY, RELAYS, SERVO_FUNCTION_GPIO
+from ..rover_defs import LEGACY_RELAY_PIN, RC_OPTION_RELAY, RELAYS, SERVO_FUNCTION_GPIO
 from ..mavlink_defs import ACCEPTED_RESULTS
 from .util.outputs import (
     RC_SWITCH_CHOICES,
@@ -12,7 +12,7 @@ from .util.outputs import (
     assign_rc_switch,
     rc_channel_with_option,
 )
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Action, Step, param_field, value_field
 
 RELAY_CHOICES = [(f"Relay {relay}", relay) for relay in RELAYS]

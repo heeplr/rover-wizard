@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .util.choices import DISABLED_ENABLED_CHOICES
 from .util.outputs import RELAY_PIN_OUTPUT_CHOICES, SPRAYER_SERVO_FUNCTIONS, assign_exclusive_output
-from .util.hardware import has
+from .util.rover_hardware import has
 from ..model import Step, param_field, value_field
 
 

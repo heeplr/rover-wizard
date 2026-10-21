@@ -21,9 +21,10 @@ from .util import timebase
 from .session.changes import ChangeTracker
 from .motion.driving import DriveSession
 from .util.errors import Cancelled, VehicleError
-from .ardupilot_defs import SERVO_FUNCTION_THROTTLE_LEFT, SERVO_FUNCTION_THROTTLE_RIGHT, SERVO_OUTPUTS
+from .rover_defs import FRAME_CLASS_BOAT, SERVO_FUNCTION_THROTTLE_LEFT, SERVO_FUNCTION_THROTTLE_RIGHT, SERVO_OUTPUTS
 from .mavlink_defs import MAV_SEVERITY_ERROR, MAV_SEVERITY_WARNING
-from .model import Field, Step, parameter_names_text
+from .model import Field, Step, parameter_names_text, worded
+from . import texts
 from .motion.servo_test import ServoTester
 
 from .session.store import Store
@@ -176,6 +177,18 @@ class Ctx:
             self.output_with_function(function)
             for function in (SERVO_FUNCTION_THROTTLE_LEFT, SERVO_FUNCTION_THROTTLE_RIGHT)
         )
+
+    def is_boat(self) -> bool:
+        """FRAME_CLASS is Boat: ArduPilot behaves as a boat, and the wizard's texts are worded for one."""
+        return self.param_int("FRAME_CLASS") == FRAME_CLASS_BOAT
+
+    def words(self, text: str) -> str:
+        """A text as it reads on this vehicle (see model.Wording)."""
+        return worded(text, self.is_boat())
+
+    def prompt(self, key: str) -> str:
+        """A question or instruction of an action (wizard_text.json "prompts"), worded for this vehicle."""
+        return self.words(texts.prompt(key))
 
     # ================================================================== step forms
     def is_visible(self, field: Field) -> bool:
@@ -356,7 +369,7 @@ class Ctx:
         """Run a step action; its briefing (what the pilot will do, what to watch out for) is logged first, so it
         stands above the action's first question - which is the pilot's go-ahead."""
         if action.briefing:
-            for line in action.briefing.split("\n"):
+            for line in self.words(action.briefing).split("\n"):
                 self.log(line)
         action.fn(self)
 
@@ -409,9 +422,7 @@ class Ctx:
     def require_armed(self) -> None:
         """Refuse to continue unless the vehicle is armed (guards every action that drives)."""
         if not self.vehicle.armed:
-            raise VehicleError(
-                "The vehicle must be ARMED for this action (use the Arm button, outdoors, wheels on the ground)."
-            )
+            raise VehicleError(self.prompt("drive.must_be_armed"))
 
     def cleanup(self) -> None:
         """After every action (success, error or cancel): stop driving and clear any open prompt."""

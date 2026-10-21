@@ -68,7 +68,7 @@ def action_calibrate_gyro(ctx):
 
 def action_calibrate_level(ctx):
     """Level (AHRS trim) calibration with the vehicle standing level in its driving attitude."""
-    ctx.pause("Place the vehicle LEVEL in its normal driving position (on flat ground), keep it still.")
+    ctx.pause(ctx.prompt("accel.level_position"))
     # param5 = level (AHRS trim)
     _run_quick_calibration(ctx, "Level", 0, 0, 0, 0, PREFLIGHT_CALIBRATION_LEVEL)
     remember_level_orientation(ctx)

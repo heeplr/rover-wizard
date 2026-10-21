@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Optional
 
 from ..util.errors import VehicleError
-from .util.hardware import has
+from .util.rover_hardware import has
 from .util.outputs import mode_channel
 from ..model import Action, Step, param_field
-from ..ardupilot_defs import RC_CHANNELS
+from ..rover_defs import RC_CHANNELS
 
 # MODE1..MODE6 (six positions of the mode switch)
 FLIGHT_MODE_SLOTS = range(1, 7)

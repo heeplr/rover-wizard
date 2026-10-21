@@ -2,7 +2,7 @@
 
 import pytest
 
-from rover_wizard.ardupilot_defs import MODES
+from rover_wizard.rover_defs import MODES
 from rover_wizard.steps.predrive import action_test_rc_failsafe
 
 from util.helpers import make

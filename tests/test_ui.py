@@ -88,12 +88,12 @@ def row_of(screen, field_key):
     return screen.widgets[field_key].parent
 
 
-async def every_step_renders(skid: bool, size=SIZE):
-    """Open every step (including hidden ones) and keep a text screenshot of each."""
-    app = WizardApp(demo=True, demo_skid=skid)
+async def every_step_renders(demo: str, size=SIZE):
+    """Open every step (including hidden ones) of a demo vehicle and keep a text screenshot of each."""
+    app = WizardApp(demo=demo)
     async with app.run_test(size=size) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
-        kind = ("skid" if skid else "ackermann") + ("" if size == SIZE else f" {size[0]}x{size[1]}")
+        kind = demo + ("" if size == SIZE else f" {size[0]}x{size[1]}")
         overflowing = []
         for index, step in enumerate(STEPS):
             await screen.show_step(index)
@@ -121,7 +121,7 @@ async def every_step_renders(skid: bool, size=SIZE):
 
 async def main_scenario():
     """Click through the features one by one, as a pilot would."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         text = screen_text(app)
@@ -261,7 +261,7 @@ async def main_scenario():
 
 async def narrow_terminal():
     """The layout must survive a smaller terminal (120 x 40) without crashing."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=(120, 40)) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         text = screen_text(app)
@@ -294,7 +294,7 @@ def pure_rendering_checks():
 
 async def steering_test_scenario():
     """Test R in the real UI: the steering output moves right, the vehicle stays disarmed, no motor test."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await screen.show_step(INDEX["steering_output"])
@@ -330,7 +330,7 @@ async def steering_test_scenario():
 
 async def output_selector_scenario():
     """Choosing another output in the Servo outputs step redraws its fields with that output's own settings."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         # output 5 follows RC channel 7
@@ -352,7 +352,7 @@ async def output_selector_scenario():
 
 async def gps_count_scenario():
     """Choosing two receivers in the real dropdown shows the selector; selecting GPS 2 loads its own settings."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         # an NMEA receiver is configured as GPS 2
@@ -378,7 +378,7 @@ async def gps_count_scenario():
 
 async def parameter_help_scenario():
     """A field without wizard help shows ArduPilot's own description of its parameter."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await screen.show_step(INDEX["gps"])
@@ -397,7 +397,7 @@ async def parameter_help_scenario():
 
 async def sensor_panel_scenario():
     """The side panel shows a compass tape and accelerometer/gyro bars - only for sensors the vehicle has."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         # sections are visible from the start but filled by the first refresh: wait for their content
@@ -450,7 +450,7 @@ async def sensor_panel_scenario():
 
 async def closing_while_a_job_updates_scenario():
     """A job finishing while the wizard closes must not crash: its screen updates are dropped."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     errors = []
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
@@ -474,7 +474,7 @@ async def closing_while_a_job_updates_scenario():
 
 async def parameter_list_scenario():
     """Ctrl+P: every parameter, searchable; a dialog edits the raw value with a live reading."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await screen.show_step(INDEX["compass"])
@@ -532,7 +532,7 @@ async def parameter_list_scenario():
 
 async def backup_restore_scenario():
     """The parameter list's R/W column, Backup into the data folder and Restore from a file."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await pilot.press("ctrl+p")
@@ -622,7 +622,7 @@ async def connect_screen_scenario(tmp_path):
 
 async def main_buttons_scenario():
     """Arm (after a question), Disarm, Skip, Cancel and the arming requirement of actions."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
 
@@ -682,7 +682,7 @@ async def main_buttons_scenario():
 async def parameter_dialogs_scenario(tmp_path):
     """The edge cases of the parameter list's dialogs: a read-only parameter, Cancel, a file that doesn't exist or
     can't be read, and a file that matches the vehicle."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await pilot.press("ctrl+p")
@@ -737,7 +737,7 @@ async def parameter_dialogs_scenario(tmp_path):
 
 async def hidden_parameters_scenario():
     """A step's note about settings missing on this firmware names each one's parameter."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await screen.show_step(INDEX["remote_id"])
@@ -753,7 +753,7 @@ async def hidden_parameters_scenario():
 
 async def action_help_scenario():
     """The ❓ next to an action button opens that action's help."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         await screen.show_step(INDEX["rc"])
@@ -767,10 +767,12 @@ async def action_help_scenario():
 
 
 @pytest.mark.parametrize(
-    "skid, size", [(False, SIZE), (True, SIZE), (False, (120, 40))], ids=["ackermann", "skid", "ackermann-120x40"]
+    "demo, size",
+    [("rover", SIZE), ("skid", SIZE), ("sailboat", SIZE), ("rover", (120, 40))],
+    ids=["ackermann", "skid", "sailboat", "ackermann-120x40"],
 )
-def test_every_step_renders_and_fits(skid, size):
-    asyncio.run(every_step_renders(skid, size))
+def test_every_step_renders_and_fits(demo, size):
+    asyncio.run(every_step_renders(demo, size))
 
 
 def test_pilot_clicks_through_the_features():
@@ -792,7 +794,7 @@ def test_bar_text():
 async def leaving_with_unapplied_values_scenario():
     """Back with an edited field asks first: Escape stays, Discard leaves without writing, Apply writes and leaves.
     The reboot question starts on No, and Escape answers No."""
-    app = WizardApp(demo=True)
+    app = WizardApp(demo="rover")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         battery = INDEX["battery"]
@@ -838,7 +840,7 @@ async def leaving_with_unapplied_values_scenario():
 async def job_ending_while_a_step_is_mounted_scenario():
     """A background job that ends while show_step() is still mounting the next step must not touch its widgets yet
     (a Select isn't composed until mounted); the value it proposed shows once the step is up."""
-    app = WizardApp(demo=True, demo_skid=True)
+    app = WizardApp(demo="skid")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
         showing = asyncio.create_task(screen.show_step(INDEX["steering_output"]))
