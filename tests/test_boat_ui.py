@@ -21,8 +21,12 @@ async def boat_scenario():
     app = WizardApp(demo="sailboat")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
-        text = screen_text(app)
-        check("vehicle info names the boat's steering", "Steering type in use: RUDDER" in text, text[:600])
+        # the vehicle info is filled in the background while the step is shown
+        check(
+            "vehicle info names the boat's steering",
+            await until(pilot, lambda: "Steering type in use: RUDDER" in screen_text(app)),
+            screen_text(app)[:600],
+        )
         check(
             "status line names the boat's steering", await until(pilot, lambda: "RUDDER steering" in screen_text(app))
         )

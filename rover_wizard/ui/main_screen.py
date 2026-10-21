@@ -629,8 +629,19 @@ class MainScreen(Screen):
             elif answer == "discard":
                 self._write_log("Discarded: " + ", ".join(unapplied))
                 leave()
+            else:
+                # Stay: the dialog hands the focus back to the clicked sidebar entry, which then looks selected
+                self.call_later(self._focus_current_step_entry)
 
         self.app.push_screen(LeaveStepScreen(unapplied), answered)
+
+    def _focus_current_step_entry(self) -> None:
+        """If a sidebar entry has the focus, give it to the current step's entry (focus looks like a selection)."""
+        focused = self.app.focused
+        if focused is not None and focused.has_class("nav"):
+            current = self.query_one(f"#nav-{self.step_index}", Button)
+            # a disabled entry can't take the focus: then no entry keeps it
+            self.app.set_focus(current if current.focusable else None)
 
     def _advance(self) -> None:
         """Open the next applicable step (or say that this was the last one)."""
