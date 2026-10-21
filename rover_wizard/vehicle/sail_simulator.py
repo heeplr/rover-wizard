@@ -61,6 +61,8 @@ WIND_VANE_SETTINGS = {
     "WNDVN_SPEED_FILT": 2,
     "WNDVN_TRUE_FILT": 10,
 }
+# [V] AP_WindVane_Analog: a direction calibration fails if the vane's voltage changed less than this
+CALIBRATION_VOLTS_MIN = 1.0
 # [s] a speed calibration only stores what it reads now
 SPEED_CALIBRATION_SECONDS = 1.0
 
@@ -178,6 +180,12 @@ class SailSimulation:
         self._wind_calibration = None
         if mode == WIND_VANE_CALIBRATE_DIRECTION and self.get_int("WNDVN_TYPE") == WIND_VANE_TYPE_ANALOG:
             low, high = self.TRUE_VANE_VOLTS
+            if high - low < CALIBRATION_VOLTS_MIN:
+                self._add_status_text(
+                    f"WindVane: Calibration failed (volt diff {high - low:.1f} below {CALIBRATION_VOLTS_MIN:.1f})"
+                )
+                super().set_param("WNDVN_CAL", 0)
+                return
             super().set_param("WNDVN_DIR_V_MIN", low)
             super().set_param("WNDVN_DIR_V_MAX", high)
             self._add_status_text(f"WindVane: Calibration complete (volt min:{low:.1f} max:{high:.1f})")
