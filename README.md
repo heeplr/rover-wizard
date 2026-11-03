@@ -15,7 +15,7 @@
 | rover\_wizard/motion/analysis.py            |      204 |        4 |       50 |        5 |     96% |231, 284, 312-\>320, 364, 385 |
 | rover\_wizard/motion/driving.py             |      178 |        5 |       48 |        2 |     97% |66, 238-239, 248-\>251, 339-340 |
 | rover\_wizard/motion/sail\_test.py          |       11 |        0 |        2 |        0 |    100% |           |
-| rover\_wizard/motion/servo\_test.py         |      255 |        8 |       66 |        5 |     96% |118-119, 123-124, 132-133, 272-\>274, 406, 441 |
+| rover\_wizard/motion/servo\_test.py         |      291 |       10 |       82 |        7 |     95% |118-119, 123-124, 132-133, 272-\>274, 406, 445, 483, 496 |
 | rover\_wizard/param\_cli.py                 |      126 |        5 |       40 |        2 |     96% |96, 121-123, 163 |
 | rover\_wizard/rover\_defs.py                |       69 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/session/\_\_init\_\_.py       |        0 |        0 |        0 |        0 |    100% |           |
@@ -67,7 +67,7 @@
 | rover\_wizard/steps/util/choices.py         |        3 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/steps/util/compass\_slots.py  |       27 |        2 |       10 |        2 |     89% |    40, 55 |
 | rover\_wizard/steps/util/driving.py         |       15 |        0 |        2 |        0 |    100% |           |
-| rover\_wizard/steps/util/outputs.py         |       83 |        1 |       38 |        1 |     98% |       226 |
+| rover\_wizard/steps/util/outputs.py         |       89 |        1 |       40 |        1 |     98% |       243 |
 | rover\_wizard/steps/util/ports.py           |       40 |        1 |        8 |        1 |     96% |        62 |
 | rover\_wizard/steps/util/probing.py         |       36 |        0 |        6 |        1 |     98% |   65-\>67 |
 | rover\_wizard/steps/util/rover\_hardware.py |       78 |        0 |        8 |        0 |    100% |           |
@@ -79,7 +79,7 @@
 | rover\_wizard/texts.py                      |       24 |        0 |        4 |        0 |    100% |           |
 | rover\_wizard/ui/\_\_init\_\_.py            |        0 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/ui/connect\_screen.py         |       60 |        0 |        8 |        1 |     99% | 62-\>exit |
-| rover\_wizard/ui/main\_screen.py            |      466 |       15 |      162 |       18 |     95% |225, 282-283, 375, 377-378, 472-\>463, 476-\>463, 484, 490, 513, 522-\>exit, 525-\>exit, 529, 533-\>exit, 556-\>exit, 569-\>exit, 614-\>616, 622, 662, 676, 680-681, 695-\>exit |
+| rover\_wizard/ui/main\_screen.py            |      466 |       15 |      160 |       18 |     95% |225, 282-283, 375, 377-378, 472-\>463, 476-\>463, 484, 490, 513, 522-\>exit, 525-\>exit, 529, 533-\>exit, 556-\>exit, 569-\>exit, 614-\>616, 622, 662, 676, 680-681, 695-\>exit |
 | rover\_wizard/ui/markdown.py                |        4 |        0 |        0 |        0 |    100% |           |
 | rover\_wizard/ui/modals.py                  |      125 |        9 |        8 |        3 |     91% |38, 74, 196-202, 217, 220-\>exit |
 | rover\_wizard/ui/monitor.py                 |       74 |        1 |       16 |        2 |     97% |72, 120-\>119 |
@@ -100,7 +100,7 @@
 | rover\_wizard/vehicle/rc\_scaling.py        |       24 |        1 |        8 |        1 |     94% |        39 |
 | rover\_wizard/vehicle/rover\_simulator.py   |      525 |        9 |      178 |        8 |     97% |647, 725, 727, 747-748, 772, 775-780, 1111-\>exit, 1246 |
 | rover\_wizard/vehicle/sail\_simulator.py    |       97 |        0 |       32 |        1 |     99% | 119-\>121 |
-| **TOTAL**                                   | **6791** |  **218** | **1772** |  **203** | **95%** |           |
+| **TOTAL**                                   | **6833** |  **220** | **1788** |  **205** | **95%** |           |
 
 
 ## Setup coverage badge
