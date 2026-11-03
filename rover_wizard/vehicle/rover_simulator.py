@@ -159,6 +159,21 @@ FUNCTION_BY_TEST_INSTANCE = {
 }
 
 
+def scaled_throttle(command: float, deadzone: float, expo: float) -> float:
+    """Like AP_MotorsUGV::get_scaled_throttle (as fractions, -1..1): any non-zero command starts at the dead-zone
+    (MOT_THR_MIN), then the thrust curve (MOT_THST_EXPO) shapes it."""
+    # practically zero throttle
+    if abs(command) <= 1e-3:
+        return 0.0
+    # Map |command| 0..1 onto dead-zone..1 (linear), keeping the command's sign.
+    output = deadzone + min(1.0, abs(command)) * (1 - deadzone)
+    # ArduPilot ignores 0 and values outside -1..1
+    if expo and -1 <= expo <= 1:
+        # the output whose thrust (1 - expo) x output + expo x output^2 is the wanted one
+        output = ((expo - 1) + math.sqrt((1 - expo) ** 2 + 4 * expo * output)) / (2 * expo)
+    return math.copysign(output, command)
+
+
 def _vehicle_frame_gravity(pitch_deg: float) -> tuple:
     """Unit gravity direction in the vehicle frame when the vehicle is pitched nose-down by `pitch_deg`.
 
@@ -356,6 +371,7 @@ class SimVehicle(Vehicle):
             MOT_PWM_FREQ=16,
             MOT_THR_MIN=0,
             MOT_THR_MAX=100,
+            MOT_THST_EXPO=0,
             MOT_SLEWRATE=100,
             MOT_STR_THR_MIX=0.5,
             MOT_REV_DELAY=0,
@@ -985,14 +1001,11 @@ class SimVehicle(Vehicle):
         steering, throttle = self._commanded_sticks(step)
         # MOT_THR_MIN is in percent
         configured_deadzone = self.get("MOT_THR_MIN") / 100.0
+        expo = self.get("MOT_THST_EXPO")
 
         def autopilot_output(command):
-            """ArduPilot adds MOT_THR_MIN: any non-zero command starts at the configured dead-zone."""
-            # practically zero throttle
-            if abs(command) <= 1e-3:
-                return 0.0
-            # Map |command| 0..1 onto dead-zone..1 (linear), keeping the command's sign.
-            return math.copysign(configured_deadzone + abs(command) * (1 - configured_deadzone), command)
+            """The output ArduPilot sends for a throttle command (MOT_THR_MIN, MOT_THST_EXPO)."""
+            return scaled_throttle(command, configured_deadzone, expo)
 
         def motor_effort(output):
             """The real motor ignores the first 8 % and scales the rest back to 0..1."""

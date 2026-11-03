@@ -289,6 +289,8 @@ STEP = Step(
     ]
     + build_servo_direction_fields(list(MOTOR_ROLES))
     + [
+        # before MOT_THR_MIN: its probe measures with the curve in place
+        param_field("MOT_THST_EXPO", "Thrust curve (0 = linear)", min_value=-1, max_value=1),
         param_field(
             "MOT_THR_MIN",
             "Minimum throttle (dead-zone)",

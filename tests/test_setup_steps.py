@@ -12,6 +12,7 @@ from rover_wizard.rover_defs import SERVO_FUNCTION_THROTTLE_LEFT
 from rover_wizard.rover_defs import SERVO_FUNCTION_THROTTLE_RIGHT
 from rover_wizard.ui.step_catalog import STEPS
 from rover_wizard.steps.steering_output import apply_steering_output
+from rover_wizard.vehicle.rover_simulator import scaled_throttle
 
 from util.helpers import BY_ID, act, apply, check, enter, make, wait_until
 
@@ -328,3 +329,39 @@ def test_every_action_button_has_its_own_help():
     for step in STEPS:
         texts = [action.help for action in step.actions]
         assert len(set(texts)) == len(texts), step.id
+
+
+def test_thrust_curve_is_set_on_the_motor_output_step_before_the_minimum_throttle():
+    keys = [field.key for field in BY_ID["motor_output"].fields]
+    # the minimum-throttle probe measures through the curve, so the curve comes first
+    assert keys.index("MOT_THST_EXPO") < keys.index("MOT_THR_MIN")
+    veh, ctx = make()
+    try:
+        enter(ctx, "motor_output")
+        ctx.set_field_value("MOT_THST_EXPO", -0.3)
+        apply(ctx, "motor_output")
+        assert veh.get("MOT_THST_EXPO") == pytest.approx(-0.3)
+    finally:
+        veh.disconnect()
+
+
+@pytest.mark.parametrize(
+    "command, deadzone, expo, expected",
+    [
+        (0.5, 0.0, 0.0, 0.5),
+        (0.0, 0.2, 0.5, 0.0),
+        # dead-zone first: 0.2 + 0.5 x 0.8 = 0.6
+        (0.5, 0.2, 0.0, 0.6),
+        # the output whose thrust 0.5 x out + 0.5 x out^2 is 0.5: (-0.5 + sqrt(0.25 + 1)) / 1
+        (0.5, 0.0, 0.5, -0.5 + 1.25**0.5),
+        (-0.5, 0.0, 0.5, 0.5 - 1.25**0.5),
+        # negative: less output; thrust 1.5 x out - 0.5 x out^2 = 0.5
+        (0.5, 0.0, -0.5, (-1.5 + (2.25 - 1) ** 0.5) / -1),
+        # full throttle stays full
+        (1.0, 0.1, 0.65, 1.0),
+        # ArduPilot ignores values outside -1..1
+        (0.5, 0.0, 1.5, 0.5),
+    ],
+)
+def test_simulator_shapes_the_throttle_like_ardupilot(command, deadzone, expo, expected):
+    assert scaled_throttle(command, deadzone, expo) == pytest.approx(expected)
