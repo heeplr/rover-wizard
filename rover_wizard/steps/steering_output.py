@@ -18,7 +18,7 @@ STEERING_TYPE_CHOICES = [
 # the steering type in a few words, e.g. for the status line
 STEERING_KIND = {"ackermann": Wording("FRONT-WHEEL", "RUDDER"), "skid": Wording("SKID", "TWIN-MOTOR")}
 
-STEERING_ROLE = OutputRole(SERVO_FUNCTION_GROUND_STEERING, "steering", "Steering servo", skid=False)
+STEERING_ROLE = OutputRole(SERVO_FUNCTION_GROUND_STEERING, "steering", "Steering servo", skid=False, follows_stick=True)
 
 
 def apply_steering_output(ctx):

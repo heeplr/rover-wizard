@@ -414,6 +414,11 @@ class ServoTester:
         For steering and motor outputs the wizard sends a stick position or a motor-test percentage, not a pulse
         width; ArduPilot turns that into the pulse (MIN/TRIM/MAX, reversal, ...), so the reported value is shown.
         """
+        pulse = self._settled_pulse(output)
+        return f"SERVO{output}: {pulse} us" if pulse else f"SERVO{output}: (output not reported)"
+
+    def _settled_pulse(self, output: int) -> int:
+        """The output's pulse width as reported after a change had time to take effect (0: not reported)."""
         vehicle = self._ctx.vehicle
         settled = timebase.now() + OUTPUT_SETTLE_SECONDS
         timebase.sleep(OUTPUT_SETTLE_SECONDS)
@@ -423,8 +428,7 @@ class ServoTester:
             and timebase.now() - settled < OUTPUT_REPORT_WAIT_SECONDS
         ):
             timebase.sleep(OUTPUT_REPORT_POLL_SECONDS)
-        pulse = vehicle.servo_pulse(output)
-        return f"SERVO{output}: {pulse} us" if pulse else f"SERVO{output}: (output not reported)"
+        return vehicle.servo_pulse(output)
 
     # ------------------------------------------------------------------ MIN / TRIM / MAX buttons
     def nudge_endpoint(self, function: int, suffix: str, field_key: str, direction: int) -> None:
@@ -464,6 +468,71 @@ class ServoTester:
                 f"{names[suffix]} = {new} (motor outputs are not driven; while disarmed the ESC receives TRIM, "
                 "or no pulse if MOT_SAFE_DISARM = 1)"
             )
+
+    def sample_endpoint(self, function: int, suffix: str, field_key: str) -> None:
+        """Fill the SERVOn_MIN / _MAX / _TRIM field with the pulse the steering output sends right now.
+
+        The pilot holds the steering at its end (MIN, MAX) or straight ahead (TRIM) with the transmitter: in Manual mode Rover passes the steering stick
+        to the output even while disarmed (AP_MotorsUGV::output_regular), in Hold it centres it. A hold of the
+        wizard's own (Test, +/-) is ended first, so the transmitter's stick is what is read. Only fills the field:
+        Apply writes it.
+        """
+        ctx = self._ctx
+        output = ctx.output_with_function(function)
+        if not output:
+            raise VehicleError("Assign the output first (enter its number and press Apply).")
+
+        self._release_steering()
+        vehicle = ctx.vehicle
+        if vehicle.custom_mode != MODES["MANUAL"]:
+            mode = MODE_NAMES.get(vehicle.custom_mode, vehicle.custom_mode)
+            if vehicle.armed:
+                raise VehicleError(f"The steering only follows your transmitter in MANUAL mode (now {mode}).")
+            vehicle.set_mode("MANUAL")
+            ctx.log(f"Switched to MANUAL mode: only there the steering follows your transmitter (was {mode}).")
+
+        pulse = self._settled_pulse(output)
+        if not pulse:
+            raise VehicleError(f"SERVO{output} doesn't report its pulse width (SERVO_OUTPUT_RAW) - enter it by hand.")
+        self._check_sampled_pulse(output, suffix, pulse)
+        name = f"SERVO{output}_{suffix}"
+        ctx.set_values(**{field_key: pulse})
+        ctx.log(f"{name}: sampled {pulse} us - press Apply to write it.")
+        if pulse == ctx.param_int(name):
+            ctx.log(
+                f"  {pulse} us is the current {name}: "
+                + (
+                    "with the stick centred the output sends TRIM. If the steering doesn't point straight ahead, steer "
+                    "until it does and sample again."
+                    if suffix == "TRIM"
+                    else f"the output never goes beyond it. If the steering can turn further without binding, widen "
+                    f"{name} with +/- first."
+                )
+            )
+
+    def _check_sampled_pulse(self, output: int, suffix: str, pulse: int) -> None:
+        """Refuse a sampled pulse that can't be meant: MIN not below TRIM, MAX not above it, TRIM not between the
+        ends (the output sends MIN/MAX only at full stick, so a TRIM there is the stick at its end)."""
+        ctx = self._ctx
+        low, trim, high = (
+            ctx.param_int(f"SERVO{output}_{part}", RC_PWM_NOMINAL_TRIM) for part in ("MIN", "TRIM", "MAX")
+        )
+        if suffix == "TRIM":
+            if not low < pulse < high:
+                raise VehicleError(
+                    f"SERVO{output} sends {pulse} us, its {'MIN' if pulse <= low else 'MAX'} end: steer until the "
+                    "steering points straight ahead, then press Sample again."
+                )
+            return
+        if (pulse < trim) if suffix == "MIN" else (pulse > trim):
+            return
+        reversed_output = ctx.param_int(f"SERVO{output}_REVERSED") == 1
+        # stick left drives the MIN end, right the MAX end; a reversed output swaps them
+        side = "left" if (suffix == "MIN") != reversed_output else "right"
+        raise VehicleError(
+            f"SERVO{output} sends {pulse} us, not {'below' if suffix == 'MIN' else 'above'} its TRIM ({trim} us): "
+            f"hold the steering stick to the {side} until the steering reaches its end, then press Sample again."
+        )
 
 
 def steering_test_action(direction: int):

@@ -53,6 +53,8 @@ class OutputRole:
     label: str
     # True: only used on skid-steering vehicles; False: only on front-wheel steering; None: on both (e.g. a sail)
     skid: Optional[bool] = None
+    # its output follows the transmitter's stick while disarmed (the steering servo): MIN/MAX/TRIM get a Sample button
+    follows_stick: bool = False
 
 
 def servo_role_field(
@@ -91,6 +93,18 @@ def _endpoint_button(role: OutputRole, suffix: str, key: str, direction: int) ->
     )
 
 
+def _sample_button(role: OutputRole, suffix: str, key: str) -> Action:
+    """A "Sample" button that fills the field with the pulse the output sends right now (see sample_endpoint)."""
+    return Action(
+        "Sample",
+        lambda ctx: ctx.servos.sample_endpoint(role.function, suffix, key),
+        armed=False,
+        help=f"Hold the steering {'straight ahead' if suffix == 'TRIM' else 'at its end'} with your transmitter "
+        f"(Manual mode; the wizard switches a disarmed vehicle to Manual) and press this: the pulse the output sends "
+        f"right now becomes {suffix}. Only fills the field - press Apply to write it.",
+    )
+
+
 def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
     """For each role: a 'Reverse output' checkbox and its MIN/MAX/TRIM pulse widths (see servo_role_field); their help
     comes from wizard_text.json ("<step>.rev_<tag>", "<step>.min_<tag>", ...), as each role needs its own."""
@@ -108,6 +122,9 @@ def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
         )
         for suffix in ("MIN", "MAX", "TRIM"):
             key = f"{suffix.lower()}_{role.tag}"
+            buttons = [_endpoint_button(role, suffix, key, +1), _endpoint_button(role, suffix, key, -1)]
+            if role.follows_stick:
+                buttons.append(_sample_button(role, suffix, key))
             fields.append(
                 servo_role_field(
                     role,
@@ -115,7 +132,7 @@ def build_servo_direction_fields(roles, is_front_wheel_selected=None) -> list:
                     key,
                     f"{role.label}: {suffix} PWM",
                     is_front_wheel_selected=is_front_wheel_selected,
-                    inline_actions=[_endpoint_button(role, suffix, key, +1), _endpoint_button(role, suffix, key, -1)],
+                    inline_actions=buttons,
                     kind="int",
                     unit="us",
                     min_value=SERVO_PWM_RANGE[0],

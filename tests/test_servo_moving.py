@@ -425,3 +425,98 @@ def test_motor_test_and_plain_outputs_work_in_hold_without_a_mode_change(wizard)
     assert vehicle.motor_tests
     assert ctx.servos.nudge(FREE_OUTPUT, +1).startswith(f"SERVO{FREE_OUTPUT}: ")
     assert vehicle.custom_mode == MODES["HOLD"]
+
+
+# ---------------------------------------------------------------------------------------------- Sample buttons
+@pytest.mark.parametrize(
+    "suffix, reversed_output, stick, expected_pwm",
+    [
+        ("MAX", 0, 0.75, 1800),
+        ("MIN", 0, -0.5, 1300),
+        ("MIN", 1, 0.75, 1200),
+        ("MAX", 1, -0.5, 1700),
+        # the wheels point straight with the stick a little to the right
+        ("TRIM", 0, 0.1, 1540),
+    ],
+)
+def test_sample_takes_the_pulse_the_pilot_holds_the_steering_at(wizard, suffix, reversed_output, stick, expected_pwm):
+    vehicle, ctx = wizard
+    vehicle.set_param("SERVO1_REVERSED", reversed_output)
+    vehicle.custom_mode = MODES["HOLD"]
+    enter(ctx, "steering_output")
+    vehicle.pilot_sticks = (stick, 0.0)
+    key = f"{suffix.lower()}_steering"
+    ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, suffix, key)
+    assert ctx.values[key] == expected_pwm
+    assert vehicle.custom_mode == MODES["MANUAL"], "in Hold the steering stays centred"
+    assert vehicle.get(f"SERVO1_{suffix}") == {"MIN": 1100, "TRIM": 1500, "MAX": 1900}[suffix], "Apply writes it"
+    assert not vehicle.armed
+
+
+def test_sample_button_fills_its_field(wizard):
+    vehicle, ctx = wizard
+    enter(ctx, "steering_output")
+    vehicle.pilot_sticks = (-0.5, 0.0)
+    # the first Sample button is MIN's
+    assert act(ctx, "steering_output", "Sample")
+    assert ctx.values["min_steering"] == 1300
+
+
+def test_sample_on_the_wrong_side_of_trim_is_refused(wizard):
+    vehicle, ctx = wizard
+    enter(ctx, "steering_output")
+    vehicle.pilot_sticks = (0.5, 0.0)
+    with pytest.raises(VehicleError, match="hold the steering stick to the left"):
+        ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, "MIN", "min_steering")
+    assert ctx.values["min_steering"] == 1100
+
+
+def test_trim_sample_at_an_end_is_refused(wizard):
+    vehicle, ctx = wizard
+    enter(ctx, "steering_output")
+    vehicle.pilot_sticks = (-1.0, 0.0)
+    with pytest.raises(VehicleError, match="its MIN end"):
+        ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, "TRIM", "trim_steering")
+    assert ctx.values["trim_steering"] == 1500
+
+
+def test_sample_at_full_stick_hints_that_the_output_stops_at_the_current_end(wizard):
+    vehicle, ctx = wizard
+    log = []
+    ctx.set_output(log=log.append, on_wait=lambda waiting: None, on_values_changed=lambda: None)
+    enter(ctx, "steering_output")
+    vehicle.pilot_sticks = (1.0, 0.0)
+    ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, "MAX", "max_steering")
+    assert ctx.values["max_steering"] == 1900
+    assert any("never goes beyond it" in line for line in log), log
+
+
+def test_sample_reads_the_transmitter_not_the_wizards_own_hold(wizard):
+    vehicle, ctx = wizard
+    enter(ctx, "steering_output")
+    ctx.servos.hold_steering(1.0, seconds=60)
+    assert wait_until(lambda: steering_pwm(vehicle) == 1900)
+    vehicle.pilot_sticks = (0.5, 0.0)
+    ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, "MAX", "max_steering")
+    assert ctx.values["max_steering"] == 1700
+
+
+def test_sample_refused_while_armed_outside_manual(wizard):
+    vehicle, ctx = wizard
+    enter(ctx, "steering_output")
+    vehicle.arm()
+    vehicle.custom_mode = MODES["HOLD"]
+    with pytest.raises(VehicleError, match="MANUAL"):
+        ctx.servos.sample_endpoint(SERVO_FUNCTION_GROUND_STEERING, "MAX", "max_steering")
+    assert vehicle.custom_mode == MODES["HOLD"]
+
+
+def test_only_the_steering_ends_have_a_sample_button():
+    sampled = {
+        (step.id, field.key)
+        for step in BY_ID.values()
+        for field in step.fields
+        for action in field.inline_actions or []
+        if action.label == "Sample"
+    }
+    assert sampled == {("steering_output", f"{suffix}_steering") for suffix in ("min", "max", "trim")}
