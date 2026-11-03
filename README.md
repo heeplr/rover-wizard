@@ -98,9 +98,9 @@
 | rover\_wizard/vehicle/demo.py               |       11 |        0 |        4 |        0 |    100% |           |
 | rover\_wizard/vehicle/link.py               |      671 |       23 |      200 |       18 |     95% |450-\>454, 469, 481-482, 510-511, 515-\>489, 539-540, 547-\>exit, 550-551, 594, 651-\>exit, 673-676, 768-770, 890, 922-\>920, 1053, 1061, 1078, 1119, 1131, 1234, 1246 |
 | rover\_wizard/vehicle/rc\_scaling.py        |       24 |        1 |        8 |        1 |     94% |        39 |
-| rover\_wizard/vehicle/rover\_simulator.py   |      525 |        9 |      178 |        8 |     97% |647, 725, 727, 747-748, 772, 775-780, 1111-\>exit, 1246 |
+| rover\_wizard/vehicle/rover\_simulator.py   |      531 |        9 |      180 |        8 |     97% |663, 741, 743, 763-764, 788, 791-796, 1124-\>exit, 1259 |
 | rover\_wizard/vehicle/sail\_simulator.py    |       97 |        0 |       32 |        1 |     99% | 119-\>121 |
-| **TOTAL**                                   | **6833** |  **220** | **1788** |  **205** | **95%** |           |
+| **TOTAL**                                   | **6839** |  **220** | **1790** |  **205** | **95%** |           |
 
 
 ## Setup coverage badge
