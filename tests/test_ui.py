@@ -37,6 +37,8 @@ SIZE = (180, 55)
 # the fake autopilot of the connect-screen test (test_mavlink_link.py uses 14610 and up)
 UI_FAKE_AUTOPILOT_PORT = 14590
 INDEX = {step.id: position for position, step in enumerate(STEPS)}
+# [s] a step's layout settles within this (much less, except on a busy machine)
+LAYOUT_SETTLE_SECONDS = 3.0
 # set it to a folder to keep text screenshots
 SCREENSHOT_DIR = os.environ.get("ROVER_WIZARD_SCREENSHOTS")
 
@@ -98,14 +100,21 @@ async def every_step_renders(demo: str, size=SIZE):
         for index, step in enumerate(STEPS):
             await screen.show_step(index)
             await pilot.pause(0.2)
-            # Layout check: nothing may stick out past the terminal's right edge or need sideways scrolling.
-            wide = [
-                f"{step.id}:{type(widget).__name__}.{'.'.join(sorted(widget.classes))}"
-                for widget in screen.query("*")
-                if widget.display and widget.region.width and widget.region.right > size[0]
-            ]
-            if wide or screen.query_one("#stepbox").max_scroll_x > 0:
-                overflowing.append(wide or [f"{step.id}: step form scrolls sideways"])
+
+            def overflow():
+                """Widgets sticking out past the terminal's right edge, or a form that needs sideways scrolling."""
+                wide = [
+                    f"{step.id}:{type(widget).__name__}.{'.'.join(sorted(widget.classes))}"
+                    for widget in screen.query("*")
+                    if widget.display and widget.region.width and widget.region.right > size[0]
+                ]
+                return wide or ([f"{step.id}: step form scrolls sideways"] if box.max_scroll_x > 0 else [])
+
+            # Layout check. Right after a re-render the form can claim sideways overflow for a moment: the width of
+            # its new vertical scrollbar, until Textual's next layout pass. Only overflow that stays counts.
+            box = screen.query_one("#stepbox")
+            if not await until(pilot, lambda: not overflow(), timeout=LAYOUT_SETTLE_SECONDS):
+                overflowing.append(overflow())
             if SCREENSHOT_DIR:
                 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
                 with open(

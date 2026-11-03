@@ -21,6 +21,8 @@ async def boat_scenario():
     app = WizardApp(demo="sailboat")
     async with app.run_test(size=SIZE) as pilot:
         screen, ctx, vehicle = await start(pilot, app)
+        # the demo vehicles share their saved progress: after other UI tests the wizard resumes at a later step
+        await screen.show_step(INDEX["vehicle_type"])
         # the vehicle info is filled in the background while the step is shown
         check(
             "vehicle info names the boat's steering",
