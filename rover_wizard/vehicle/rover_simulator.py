@@ -100,6 +100,10 @@ from ..mavlink_defs import (
     SYS_STATUS_MILLIVOLTS_PER_VOLT,
     MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE,
     SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
+    GPS_RAW_INT_CENTI,
+    GPS_YAW_NORTH,
+    GPS_YAW_NOT_CONFIGURED,
+    UINT16_MAX,
 )
 from .rc_scaling import pwm_to_stick, stick_to_pwm
 from ..util.rotation import ORIENTATION_NAME_BY_VALUE, rotation_matrix_for_name, transform, transpose
@@ -148,6 +152,8 @@ LOOP_PERIOD = 0.01
 SPEED_NOISE = 0.015
 # [rad/s] standard deviation of the yaw-rate noise
 YAW_RATE_NOISE = 0.01
+# [rad] standard deviation of the GPS course while moving
+GPS_COURSE_NOISE = 0.02
 # the simulated motor needs 8 % before it moves
 MOTOR_DEADZONE = 0.08
 # [s] coasting slows down faster than accelerating speeds up
@@ -345,6 +351,13 @@ class SimVehicle(Vehicle):
         self._speed_pid: Optional[PidSample] = None
         # [rad/s] standard deviation of the measured turn rate's noise (a gyro on a bumpy vehicle: more)
         self.yaw_rate_noise = YAW_RATE_NOISE
+        # the GPS measures heading (two antennas), and whether it has a heading right now
+        self.gps_measures_heading = False
+        self.gps_heading_available = True
+        # headings [deg] Large Vehicle MagCal was run with (MAV_CMD_FIXED_MAG_CAL_YAW)
+        self.fixed_yaw_calibrations: list = []
+        # message id -> rate [Hz] the wizard last asked for with set_message_rate() (0 = default rate)
+        self.message_rates: dict = {}
         self._running = False
         self._build_params()
 
@@ -737,6 +750,10 @@ class SimVehicle(Vehicle):
     def setup_streams(self) -> None:
         """Nothing to request - the simulator always publishes everything."""
 
+    def set_message_rate(self, message_id: int, rate_hz: float) -> None:
+        """Only noted in message_rates (the simulator always publishes everything)."""
+        self.message_rates[message_id] = rate_hz
+
     def fetch_params(self, progress=None, timeout: float = 0) -> None:
         """Nothing to download - the parameters are already in memory."""
 
@@ -830,7 +847,7 @@ class SimVehicle(Vehicle):
             self.finished_mag_reports = {}
         elif command == MAV_CMD_FIXED_MAG_CAL_YAW:
             # Large Vehicle MagCal sets and saves the offsets right away; it sends no MAG_CAL_REPORT
-            pass
+            self.fixed_yaw_calibrations.append(params[0])
 
         return MAV_RESULT_ACCEPTED
 
@@ -955,6 +972,8 @@ class SimVehicle(Vehicle):
             throttle_input=throttle,
             north=self.north,
             east=self.east,
+            gps_course=(self._course() + random.gauss(0, GPS_COURSE_NOISE)) if self.gps_fix_type else None,
+            gps_speed=abs(self.speed) if self.gps_fix_type else None,
             steering_pid=self._steering_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_STEERING else None,
             speed_pid=self._speed_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_THROTTLE else None,
         )
@@ -1256,6 +1275,9 @@ class SimVehicle(Vehicle):
                     eph=90,
                     # GPS_RAW_INT.lat is in degE7
                     lat=int(self.LATITUDE_DEG * 1e7),
+                    vel=round(abs(self.speed) * GPS_RAW_INT_CENTI),
+                    cog=round(math.degrees(self._course()) * GPS_RAW_INT_CENTI),
+                    yaw=self._gps_yaw(),
                 ),
                 timestamp,
             )
@@ -1423,6 +1445,19 @@ class SimVehicle(Vehicle):
             sum(abs(percent) / 100 * self.MOTOR_TEST_FULL_POWER_CA for percent in list(self._motor_test_power.values()))
             / SYS_STATUS_CENTIAMPS_PER_AMP
         )
+
+    def _course(self) -> float:
+        """Course over ground [rad, 0..2pi]: the heading, or its opposite when reversing."""
+        return (self.heading + (math.pi if self.speed < 0 else 0.0)) % (2 * math.pi)
+
+    def _gps_yaw(self) -> int:
+        """GPS_RAW_INT.yaw like AP_GPS::gps_yaw_cdeg: 0 without a heading GPS, UINT16_MAX without a heading now."""
+        if not self.gps_measures_heading:
+            return GPS_YAW_NOT_CONFIGURED
+        if not self.gps_heading_available:
+            return UINT16_MAX
+        # degrees 0..360 in cdeg; 0 (north) is sent as 36000
+        return round(math.degrees(self.heading) % 360 * GPS_RAW_INT_CENTI) or GPS_YAW_NORTH
 
     def _battery_amps(self) -> float:
         """Battery current [A]: standstill, more when driving, plus motor-test motors."""

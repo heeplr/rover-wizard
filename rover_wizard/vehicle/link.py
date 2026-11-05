@@ -91,6 +91,8 @@ from ..mavlink_defs import (
     PID_TUNING_STEER,
     RC_CHANNELS_MAX,
     UINT16_MAX,
+    GPS_RAW_INT_CENTI,
+    GPS_YAW_NOT_CONFIGURED,
     SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
 )
 from .rc_scaling import RcChannelCalibration, pwm_to_stick
@@ -268,6 +270,9 @@ class DriveSample:
     run_time: float = 0.0
     # what the wizard commanded at this moment (open-loop or guided)
     command: Optional[tuple] = None
+    # course over ground [rad, 0 = north, clockwise] and ground speed [m/s] as the GPS measures them
+    gps_course: Optional[float] = None
+    gps_speed: Optional[float] = None
     # the steering-rate and speed controllers' reports (only while their PID_TUNING is switched on)
     steering_pid: Optional[PidSample] = None
     speed_pid: Optional[PidSample] = None
@@ -1097,6 +1102,25 @@ class Vehicle:
         # ATTITUDE.yaw is -pi..pi radians
         return None if attitude is None else math.degrees(attitude.yaw) % 360
 
+    def can_measure_gps_heading(self) -> bool:
+        """Whether a GPS is set up to measure the vehicle's heading (two antennas: moving baseline, dual-antenna
+        receivers) - ArduPilot then fills GPS_RAW_INT/GPS2_RAW.yaw."""
+        return any(
+            getattr(message, "yaw", GPS_YAW_NOT_CONFIGURED) != GPS_YAW_NOT_CONFIGURED
+            for message in (self.latest(name, max_age=MONITOR_MAX_AGE_SECONDS) for name in ("GPS_RAW_INT", "GPS2_RAW"))
+            if message is not None
+        )
+
+    def gps_heading(self) -> Optional[float]:
+        """The heading a GPS measures [deg, 0..360, 0 = true north], or None (no such GPS, or no heading now)."""
+        for name in ("GPS_RAW_INT", "GPS2_RAW"):
+            message = self.latest(name, max_age=MONITOR_MAX_AGE_SECONDS)
+            yaw = getattr(message, "yaw", GPS_YAW_NOT_CONFIGURED) if message is not None else GPS_YAW_NOT_CONFIGURED
+            if yaw not in (GPS_YAW_NOT_CONFIGURED, UINT16_MAX):
+                # 36000 is north
+                return yaw / GPS_RAW_INT_CENTI % 360
+        return None
+
     def pressure(self, instance: int = 1) -> Optional[tuple]:
         """(pressure [hPa], temperature [deg C]) of barometer `instance` (1..3) from fresh telemetry, or None."""
         message = self.latest(PRESSURE_MESSAGES[instance], max_age=MONITOR_MAX_AGE_SECONDS)
@@ -1224,6 +1248,10 @@ class Vehicle:
         attitude = self.latest("ATTITUDE", max_age=TELEMETRY_FRESH_SECONDS)
         position = self.latest("LOCAL_POSITION_NED", max_age=TELEMETRY_FRESH_SECONDS)
         hud = self.latest("VFR_HUD", max_age=TELEMETRY_FRESH_SECONDS)
+        gps = self.latest("GPS_RAW_INT", max_age=TELEMETRY_FRESH_SECONDS)
+        if gps is not None and UINT16_MAX not in (gps.vel, gps.cog):
+            sample.gps_speed = gps.vel / GPS_RAW_INT_CENTI
+            sample.gps_course = math.radians(gps.cog / GPS_RAW_INT_CENTI)
         sample.steering_pid = self._pid_sample(PID_TUNING_STEER, math.radians)
         sample.speed_pid = self._pid_sample(PID_TUNING_ACCZ)
         if attitude is not None:

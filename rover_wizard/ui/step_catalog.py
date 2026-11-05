@@ -44,6 +44,7 @@ from ..steps import (
     save,
     predrive,
     direction_check,
+    compass_drive,
     top_speed,
     turning,
     gains,
@@ -105,7 +106,7 @@ PHASES = (
         2,
         "Drive & tune (ARMED, open space)",
         drives=True,
-        steps=(predrive, direction_check, top_speed, turning, gains, verify, navigation, boat_loiter),
+        steps=(predrive, direction_check, compass_drive, top_speed, turning, gains, verify, navigation, boat_loiter),
     ),
     Phase(3, "Wrap-up", drives=False, steps=(final,)),
 )

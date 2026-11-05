@@ -24,8 +24,6 @@ from ..mavlink_defs import (
     MAG_CAL_SUCCESS,
     MAV_CMD_DO_CANCEL_MAG_CAL,
     MAV_CMD_DO_START_MAG_CAL,
-    MAV_CMD_FIXED_MAG_CAL_YAW,
-    MAV_RESULT_UNSUPPORTED,
     SYS_STATUS_CENTIAMPS_PER_AMP,
 )
 from ..model import Action, Step, param_field, value_field
@@ -35,6 +33,7 @@ from ..util.rotation import ORIENTATION_CHOICES, best_matching_rotation
 from ..util.timebase import now
 from ..vehicle.link import INBOX_MAG_CAL_PROGRESS, INBOX_MAG_CAL_REPORT
 from .util.actions import action_reboot_flight_controller
+from .util.heading_calibration import calibrate_from_heading, require_gps_fix
 from .util.choices import DISABLED_ENABLED_CHOICES
 from .util.compass_slots import (
     COMPASS_SLOTS,
@@ -255,36 +254,24 @@ def action_calibrate_compass(ctx):
 
 def action_large_vehicle_magcal(ctx):
     """One-shot compass calibration from a known true heading (World Magnetic Model) - no rotating needed."""
-    vehicle = ctx.vehicle
-    gps = vehicle.latest("GPS_RAW_INT")
-    if gps is None or gps.fix_type < GPS_FIX_TYPE_3D_FIX:
-        raise VehicleError(
-            "Large Vehicle MagCal needs a GPS fix (3D or better) - it looks up magnetic declination "
-            "for the current location. Get a GPS fix first (go outside, wait for satellites)."
-        )
-
+    require_gps_fix(ctx.vehicle)
     heading = ctx.number("magcal_heading", -1)
     # a compass heading in degrees
     if not 0 <= heading < 360:
         raise VehicleError("Enter the vehicle's current heading relative to true north (0-359 deg) first.")
+    calibrate_from_heading(ctx, heading)
 
-    # param1 = heading [deg], param2 = compass mask (0 = all), param3/4 = lat/lon (0 = use the current position).
-    result = vehicle.command_long(MAV_CMD_FIXED_MAG_CAL_YAW, heading, 0, 0, 0, timeout=5)
-    if result == MAV_RESULT_UNSUPPORTED:
+
+def action_heading_from_gps(ctx):
+    """Fill the heading field with the heading a two-antenna GPS measures."""
+    heading = ctx.vehicle.gps_heading()
+    if heading is None:
         raise VehicleError(
-            "This firmware/vehicle type does not support Large Vehicle MagCal - use the normal "
-            "rotate-by-hand compass calibration instead."
+            "The GPS measures no heading right now: it needs a good fix on both antennas (often RTK) - "
+            "wait under open sky, or enter the heading by hand."
         )
-
-    if result not in ACCEPTED_RESULTS:
-        raise VehicleError(f"Vehicle refused Large Vehicle MagCal (result {result}). {vehicle.last_text()}")
-    # An accepted command has already computed and saved the new offsets (Compass::mag_cal_fixed_yaw); it sends no
-    # MAG_CAL_REPORT - one arriving now would be left over from an earlier rotate-by-hand calibration.
-    ctx.changes.mark_reboot_needed("compass calibration")
-    ctx.log(
-        f"Large Vehicle MagCal done for heading {heading:.0f} deg true: the compass offsets are set and saved. "
-        "A reboot is recommended."
-    )
+    ctx.set_values(magcal_heading=round(heading, 1))
+    ctx.log(f"Heading from the GPS: {heading:.1f} deg (true north). Keep the vehicle still until the calibration.")
 
 
 # radians (COMPASS_DEC) -> degrees shown in the form
@@ -672,6 +659,14 @@ STEP = Step(
             min_value=0,
             max_value=359.9,
             when=lambda ctx: ctx.store.get("heavy_vehicle", False),
+            inline_actions=[
+                Action(
+                    "From GPS",
+                    action_heading_from_gps,
+                    armed=False,
+                    when=lambda ctx: ctx.vehicle.can_measure_gps_heading(),
+                )
+            ],
         ),
     ]
     + motor_compensation_fields(),

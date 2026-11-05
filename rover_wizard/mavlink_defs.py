@@ -198,6 +198,12 @@ UINT16_MAX = 0xFFFF
 PARAM_INDEX_UNKNOWN = 65535
 # GPS_RAW_INT.eph is HDOP multiplied by 100
 GPS_RAW_INT_EPH_SCALE = 100
+# GPS_RAW_INT.vel [cm/s] and .cog [cdeg]: UINT16_MAX = unknown
+GPS_RAW_INT_CENTI = 100
+# GPS_RAW_INT / GPS2_RAW .yaw [cdeg] (AP_GPS::gps_yaw_cdeg): 0 = the GPS can't measure heading, UINT16_MAX = it can
+# but has none now, else 1..36000 (36000 = north, so that 0 keeps its meaning)
+GPS_YAW_NOT_CONFIGURED = 0
+GPS_YAW_NORTH = 36000
 # Unit scales of SYS_STATUS fields.
 # voltage_battery is in mV
 SYS_STATUS_MILLIVOLTS_PER_VOLT = 1000
