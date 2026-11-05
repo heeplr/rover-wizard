@@ -260,6 +260,15 @@ class EkfRatios:
     compass: float
 
 
+@dataclass(frozen=True)
+class Vibration:
+    """The accelerometers' vibration (VIBRATION, AP_InertialSensor): levels [m/s^2] per axis, and how often the
+    first three accelerometers have clipped so far (counters since boot)."""
+
+    levels: tuple
+    clipping: tuple
+
+
 @dataclass
 class DriveSample:
     """What the vehicle was doing at one moment of a drive test."""
@@ -295,6 +304,7 @@ class DriveSample:
     roll: Optional[float] = None
     pitch: Optional[float] = None
     ekf_ratios: Optional[EkfRatios] = None
+    vibration: Optional[Vibration] = None
     # the steering-rate and speed controllers' reports (only while their PID_TUNING is switched on)
     steering_pid: Optional[PidSample] = None
     speed_pid: Optional[PidSample] = None
@@ -965,6 +975,19 @@ class Vehicle:
         self.command_long(MAV_CMD_SET_MESSAGE_INTERVAL, message_id, interval_us, wait=False)
 
     @contextlib.contextmanager
+    def faster_reports(self, rates: dict):
+        """While inside: these messages (id -> rate [Hz]) at their own rates; afterwards at their usual rates again
+        (STREAMS, or the firmware's default for messages the wizard doesn't usually ask for)."""
+        for message_id, rate_hz in rates.items():
+            self.set_message_rate(message_id, rate_hz)
+        try:
+            yield
+        finally:
+            usual = dict(STREAMS)
+            for message_id in rates:
+                self.set_message_rate(message_id, usual.get(message_id, 0))
+
+    @contextlib.contextmanager
     def controller_reports(self, mask: int):
         """While inside: the controllers in `mask` (GCS_PID_MASK bits) send PID_TUNING at PID_TUNING_RATE_HZ, so
         drive samples carry them. Yields whether that is possible (False without GCS_PID_MASK); the previous
@@ -1279,6 +1302,12 @@ class Vehicle:
         imu = self.latest("SCALED_IMU", max_age=TELEMETRY_FRESH_SECONDS)
         if imu is not None and (imu.xmag or imu.ymag or imu.zmag):
             sample.magnetic_field = (imu.xmag, imu.ymag, imu.zmag)
+        vibration = self.latest("VIBRATION", max_age=TELEMETRY_FRESH_SECONDS)
+        if vibration is not None:
+            sample.vibration = Vibration(
+                (vibration.vibration_x, vibration.vibration_y, vibration.vibration_z),
+                (vibration.clipping_0, vibration.clipping_1, vibration.clipping_2),
+            )
         ekf = self.latest("EKF_STATUS_REPORT", max_age=TELEMETRY_FRESH_SECONDS)
         if ekf is not None and hasattr(ekf, "compass_variance"):
             sample.ekf_ratios = EkfRatios(ekf.velocity_variance, ekf.pos_horiz_variance, ekf.compass_variance)

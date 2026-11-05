@@ -111,6 +111,8 @@ MAVLINK_MSG_ID_SERVO_OUTPUT_RAW = 36
 MAVLINK_MSG_ID_DISTANCE_SENSOR = 132
 # xmag/ymag/zmag [mGauss] of the first compass
 MAVLINK_MSG_ID_RAW_IMU = 27
+# accelerometer vibration levels [m/s^2] and clipping counts (not in a telemetry group: asked for when needed)
+MAVLINK_MSG_ID_VIBRATION = 241
 # the second receiver's fix and satellites
 MAVLINK_MSG_ID_GPS2_RAW = 124
 # rpm1, rpm2 of the first two RPM sensors

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ...model import Action, heading_field, param_field, value_field
 from ...motion.ekf_sensor_errors import compass_errors, ekf_health, encoder_errors
+from ...motion.vibration import check_vibration
 from ..ekf_sources import EKF_SOURCE_COMPASS, EKF_YAW_GPS_COMPASS_FALLBACK
 from .heading_calibration import require_gps_fix
 from .rover_hardware import has
@@ -51,6 +52,20 @@ def log_ekf_health(ctx, samples: list, always: bool = False) -> None:
         ctx.log(f"  {note}")
 
 
+def log_vibration(ctx, samples: list, always: bool = False) -> None:
+    """Explain vibration problems of a run (and, with always, the levels even when all is well)."""
+    check = check_vibration(samples)
+    if check is None:
+        return
+    if always:
+        ctx.log(
+            f"Vibration (highest): {check.highest:.0f} m/s^2, clipping {check.clipping}"
+            + ("" if check.notes else " - fine")
+        )
+    for note in check.notes:
+        ctx.log(f"  {note}")
+
+
 def action_measure_ekf_sensor_errors(ctx):
     """Two straight runs, out and back; propose EK3_WENC_VERR and EK3_YAW_M_NSE from how the sensors agree with the
     GPS, and report the EKF's test ratios."""
@@ -79,7 +94,9 @@ def action_measure_ekf_sensor_errors(ctx):
         _report_encoders(ctx, runs)
     if measures_compass(ctx):
         _report_compass(ctx, runs)
-    log_ekf_health(ctx, [sample for samples in runs for sample in samples], always=True)
+    every = [sample for samples in runs for sample in samples]
+    log_vibration(ctx, every, always=True)
+    log_ekf_health(ctx, every, always=True)
     ctx.log("Review the proposed values and press Apply.")
 
 

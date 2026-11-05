@@ -7,7 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
-from ..motion.step_tuning import GainTuner, step_response_metrics
+from ..mavlink_defs import MAVLINK_MSG_ID_VIBRATION
+from ..motion.step_tuning import GainTuner, step_response_metrics, suggest_error_filter
 from ..rover_defs import GCS_PID_MASK_STEERING, GCS_PID_MASK_THROTTLE, GRAVITY, STEER_SPEED_MIN, TURN_MAX_G_MIN
 from ..util.errors import VehicleError
 from ..util.values import format_value
@@ -20,9 +21,11 @@ from .util.driving import (
 )
 from ..model import Action, Step, param_field, value_field
 from .util.rover_hardware import is_motorised
-from .util.ekf_measurement import EKF_ACTION, ekf_fields, log_ekf_health
+from .util.ekf_measurement import EKF_ACTION, ekf_fields, log_ekf_health, log_vibration
 
 DEFAULT_TUNING_ROUNDS = 6
+# [Hz] vibration reports during the tuning runs (not sent otherwise)
+VIBRATION_RATE_HZ = 5
 MAX_TUNING_ROUNDS = 15
 
 # ArduPilot aimed for less than 95 % of the requested target: say why
@@ -178,6 +181,8 @@ class _Controller:
     gains: dict
     # [s] slower to 63 % of the target counts as too slow
     slow_rise_time: float
+    # its error filter (FLTE): proposed lower when measurement noise makes the output jitter
+    error_filter: str
     # how values are shown: unit and conversion from the measured unit
     unit: str
     shown: Callable = float
@@ -189,6 +194,7 @@ STEERING_CONTROLLER = _Controller(
     GCS_PID_MASK_STEERING,
     {"ff": "ATC_STR_RAT_FF", "p": "ATC_STR_RAT_P", "i": "ATC_STR_RAT_I"},
     slow_rise_time=1.0,
+    error_filter="ATC_STR_RAT_FLTE",
     unit="deg/s",
     shown=math.degrees,
 )
@@ -199,6 +205,7 @@ SPEED_CONTROLLER = _Controller(
     GCS_PID_MASK_THROTTLE,
     {"p": "ATC_SPEED_P", "i": "ATC_SPEED_I"},
     slow_rise_time=3.0,
+    error_filter="ATC_SPEED_FLTE",
     unit="m/s",
 )
 
@@ -223,7 +230,10 @@ def _tune_by_step_response(
 
     tuner = GainTuner(current, controller.slow_rise_time)
     rounds = int(ctx.number("rounds", DEFAULT_TUNING_ROUNDS))
-    with ctx.vehicle.controller_reports(controller.report_mask) as reporting:
+    with (
+        ctx.vehicle.controller_reports(controller.report_mask) as reporting,
+        ctx.vehicle.faster_reports({MAVLINK_MSG_ID_VIBRATION: VIBRATION_RATE_HZ}),
+    ):
         if not reporting:
             ctx.log("i No GCS_PID_MASK: the responses are compared with the requested target only.")
         for round_number in range(1, rounds + 1):
@@ -237,17 +247,21 @@ def _tune_by_step_response(
                 step_off,
                 desired=[report and report.desired for report in reports],
                 outputs=[report and report.output for report in reports],
+                feedback=[report and report.p + report.d for report in reports],
             )
             change = tuner.next_gains(response)
             ctx.log(f"Round {round_number}: {_describe(controller, response)} -> {change.reason}")
             log_ekf_health(ctx, samples)
+            log_vibration(ctx, samples)
+            filtered = _propose_error_filter(ctx, controller, response, current["p"])
             aimed = response.target if response else None
             if aimed is not None and abs(aimed) < AIMED_BELOW_REQUESTED * abs(target):
                 ctx.log(
                     f"  ArduPilot aimed for {controller.shown(aimed):.3g} instead of {controller.shown(abs(target)):.3g}"
                     f" {controller.unit}" + (f" ({limit_note(aimed)})" if limit_note else "")
                 )
-            if change.blocked or change.converged:
+            # a new error filter changes the response: one more round to see it, unless nothing can help
+            if change.blocked or (change.converged and not filtered):
                 break
 
             for key, name in controller.gains.items():
@@ -260,6 +274,22 @@ def _tune_by_step_response(
                 ctx.pause(between_rounds)
 
 
+def _propose_error_filter(ctx, controller: _Controller, response, p_gain: float) -> bool:
+    """Lower the error filter (FLTE) when noise makes the output jitter (written at once, like the gains);
+    whether it changed."""
+    if not ctx.vehicle.has_parameter(controller.error_filter):
+        return False
+    current = ctx.param_value(controller.error_filter, 0.0) or 0.0
+    proposal, reason = suggest_error_filter(response, p_gain, current)
+    if reason:
+        ctx.log(f"  {reason}" + (f" ({controller.error_filter} was {current:g} Hz)" if proposal else ""))
+    if proposal is None:
+        return False
+    ctx.set_param(controller.error_filter, proposal)
+    ctx.set_values(**{controller.error_filter: proposal})
+    return True
+
+
 def _describe(controller: _Controller, response) -> str:
     """One round's measurements for the log."""
     if response is None:
@@ -269,7 +299,9 @@ def _describe(controller: _Controller, response) -> str:
         # Fractions are shown as percentages (x 100).
         f"overshoot {response.overshoot * 100:.0f}%, t63 {format_value(response.rise_time_63)} s, steady-state error "
         f"{response.steady_state_error:.0%} (aimed at {shown(response.target):.3g} {controller.unit}, noise "
-        f"±{shown(response.noise):.2g} {controller.unit})"
+        f"±{shown(response.noise):.2g} {controller.unit}"
+        + ("" if response.jitter is None else f", output jitter ±{response.jitter:.0%}")
+        + ")"
     )
 
 
@@ -385,9 +417,11 @@ STEP = Step(
         value_field("r_step", "Yaw-rate step target", unit="deg/s", default=default_yaw_rate_step),
         param_field("ATC_SPEED_P", "Speed P"),
         param_field("ATC_SPEED_I", "Speed I"),
+        param_field("ATC_SPEED_FLTE", "Speed error filter (0 = off)", unit="Hz"),
         param_field("ATC_STR_RAT_FF", "Steering rate FF"),
         param_field("ATC_STR_RAT_P", "Steering rate P"),
         param_field("ATC_STR_RAT_I", "Steering rate I"),
+        param_field("ATC_STR_RAT_FLTE", "Steering rate error filter (0 = off)", unit="Hz"),
     ],
     [
         # first: Guided mode relies on the EKF's heading and position

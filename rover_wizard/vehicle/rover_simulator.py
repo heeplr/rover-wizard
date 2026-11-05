@@ -160,6 +160,11 @@ GPS_SPEED_NOISE = 0.04
 # [m/s] standard deviation of the wheel encoders' speed, [deg] of the compass heading (unless a test sets others)
 DEFAULT_ENCODER_SPEED_NOISE = 0.05
 DEFAULT_COMPASS_NOISE_DEG = 2.0
+# [m/s^2] vibration of a well mounted flight controller while driving; at standstill a tenth of it
+DEFAULT_VIBRATION_LEVEL = 8.0
+STANDSTILL_VIBRATION_SHARE = 0.1
+# [m/s] faster counts as driving for the vibration
+STOPPED_VIBRATION_SPEED = 0.05
 # the EKF's velocity and position test ratios (a healthy EKF)
 SIMULATED_EKF_RATIO = 0.1
 PERCENT = 100
@@ -354,6 +359,8 @@ class SimVehicle(Vehicle):
         self._override_time = 0.0
         self._guided_target = (0.0, 0.0)
         self._guided_integral = [0.0, 0.0]
+        # the controllers' filtered errors (speed, turn rate)
+        self._guided_error = [0.0, 0.0]
         # the steering controller's turn-rate target after its acceleration limit [rad/s] (AR_AttitudeControl)
         self._desired_turn_rate = 0.0
         # what the Guided controllers last reported (PID_TUNING), None while they don't run
@@ -373,6 +380,10 @@ class SimVehicle(Vehicle):
         self.compass_noise_deg = DEFAULT_COMPASS_NOISE_DEG
         self.compass_offset_deg = 0.0
         self.compass_heading_dependent_deg = 0.0
+        # [m/s^2] the accelerometers' vibration level while driving, and how often they clip per second of driving
+        self.vibration_level = DEFAULT_VIBRATION_LEVEL
+        self.clipping_per_second = 0.0
+        self._clipping = 0.0
         # headings [deg] Large Vehicle MagCal was run with (MAV_CMD_FIXED_MAG_CAL_YAW)
         self.fixed_yaw_calibrations: list = []
         # message id -> rate [Hz] the wizard last asked for with set_message_rate() (0 = default rate)
@@ -484,6 +495,8 @@ class SimVehicle(Vehicle):
             ATC_SPEED_I=0.2,
             ATC_SPEED_D=0,
             GCS_PID_MASK=0,
+            ATC_STR_RAT_FLTE=10,
+            ATC_SPEED_FLTE=10,
             WP_SPEED=2,
             WP_RADIUS=2,
             WP_OVERSHOOT=2,
@@ -1029,8 +1042,9 @@ class SimVehicle(Vehicle):
             self._steering_pid = self._speed_pid = None
             self._desired_turn_rate = self.yaw_rate
         if not self.armed or self.custom_mode == MODES["HOLD"]:
-            # a stopped controller forgets its integrators
+            # a stopped controller forgets its integrators and filtered errors
             self._guided_integral = [0.0, 0.0]
+            self._guided_error = [0.0, 0.0]
             return 0.0, 0.0
 
         if self.custom_mode != MODES["GUIDED"]:
@@ -1042,9 +1056,11 @@ class SimVehicle(Vehicle):
         # CRUISE_THROTTLE is in percent
         cruise_throttle = self.get("CRUISE_THROTTLE") / 100.0
         throttle_per_speed = cruise_throttle / cruise_speed if cruise_speed > 0 else 1 / self.TOP_SPEED
-        speed_error = target_speed - self.speed
         desired_rate = self._limited_turn_rate(target_yaw_rate, step)
-        yaw_error = desired_rate - self.yaw_rate
+        # like AC_PID: the error is low-pass filtered (FLTE); the steering controller sees the noisy gyro
+        measured_yaw_rate = self.yaw_rate + random.gauss(0, self.yaw_rate_noise)
+        speed_error = self._filtered_error(0, target_speed - self.speed, "ATC_SPEED_FLTE", step)
+        yaw_error = self._filtered_error(1, desired_rate - measured_yaw_rate, "ATC_STR_RAT_FLTE", step)
         # Output = feed-forward x target + P x error + integrator (the structure of ArduPilot's controllers).
         speed_parts = (throttle_per_speed * target_speed, self.get("ATC_SPEED_P") * speed_error)
         steering_parts = (self.get("ATC_STR_RAT_FF") * desired_rate, self.get("ATC_STR_RAT_P") * yaw_error)
@@ -1061,8 +1077,16 @@ class SimVehicle(Vehicle):
         throttle = sum(speed_parts) + self._guided_integral[0]
         steering = sum(steering_parts) + self._guided_integral[1]
         self._speed_pid = PidSample(target_speed, self.speed, *speed_parts, self._guided_integral[0], 0.0)
-        self._steering_pid = PidSample(desired_rate, self.yaw_rate, *steering_parts, self._guided_integral[1], 0.0)
+        self._steering_pid = PidSample(desired_rate, measured_yaw_rate, *steering_parts, self._guided_integral[1], 0.0)
         return max(-1, min(1, steering)), max(-1, min(1, throttle))
+
+    def _filtered_error(self, index: int, error: float, filter_name: str, step: float) -> float:
+        """AC_PID's error filter: first-order low pass at the parameter's frequency [Hz] (0 = none)."""
+        cutoff = self.get(filter_name)
+        # calc_lowpass_alpha_dt: dt / (dt + 1 / (2 pi fc))
+        alpha = step / (step + 1 / (2 * math.pi * cutoff)) if cutoff > 0 else 1.0
+        self._guided_error[index] += alpha * (error - self._guided_error[index])
+        return self._guided_error[index]
 
     def _limited_turn_rate(self, target: float, step: float) -> float:
         """Like AR_AttitudeControl::get_steering_out_rate: the turn-rate target after ATC_STR_ACC_MAX, ATC_STR_RAT_MAX
@@ -1289,6 +1313,7 @@ class SimVehicle(Vehicle):
         imu = self._scaled_imu()
         imu.xmag, imu.ymag, imu.zmag = self._calibrated_compass_field()
         self._store_message("SCALED_IMU", imu, timestamp)
+        self._publish_vibration(elapsed, timestamp)
         # heading wrapped to -pi..pi, as ArduPilot reports ATTITUDE.yaw
         yaw = math.atan2(math.sin(self.heading), math.cos(self.heading))
         self._store_message(
@@ -1491,6 +1516,21 @@ class SimVehicle(Vehicle):
             # share = percent / 100
             sum(abs(percent) / 100 * self.MOTOR_TEST_FULL_POWER_CA for percent in list(self._motor_test_power.values()))
             / SYS_STATUS_CENTIAMPS_PER_AMP
+        )
+
+    def _publish_vibration(self, elapsed: float, timestamp: float) -> None:
+        """VIBRATION: the level while driving (a little at standstill), clipping counted up while driving."""
+        moving = abs(self.speed) > STOPPED_VIBRATION_SPEED
+        level = self.vibration_level if moving else self.vibration_level * STANDSTILL_VIBRATION_SHARE
+        if moving:
+            self._clipping += self.clipping_per_second * elapsed
+        clipped = int(self._clipping)
+        self._store_message(
+            "VIBRATION",
+            SimpleNamespace(
+                vibration_x=level, vibration_y=level, vibration_z=level, clipping_0=clipped, clipping_1=0, clipping_2=0
+            ),
+            timestamp,
         )
 
     def _compass_heading_error_deg(self) -> float:

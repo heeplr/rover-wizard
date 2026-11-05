@@ -6,7 +6,11 @@ import random
 
 import pytest
 
-from rover_wizard.mavlink_defs import MAVLINK_MSG_ID_EKF_STATUS_REPORT, MAVLINK_MSG_ID_GPS_RAW_INT
+from rover_wizard.mavlink_defs import (
+    MAVLINK_MSG_ID_EKF_STATUS_REPORT,
+    MAVLINK_MSG_ID_GPS_RAW_INT,
+    MAVLINK_MSG_ID_VIBRATION,
+)
 from rover_wizard.motion.ekf_sensor_errors import (
     compass_errors,
     compass_heading,
@@ -173,9 +177,10 @@ def test_both_values_are_proposed_from_the_same_two_runs(rover):
     check("YAW_M_NSE proposed", 0.05 <= ctx.values["EK3_YAW_M_NSE"] <= 0.1, ctx.values["EK3_YAW_M_NSE"])
     check("nothing written yet", (veh.get("EK3_WENC_VERR"), veh.get("EK3_YAW_M_NSE")) == (0.1, 0.5))
     check("EKF ratios logged", any(line.startswith("EKF test ratios") for line in lines), "\n".join(lines))
+    check("vibration logged", any(line.startswith("Vibration (highest)") and "fine" in line for line in lines))
     usual = dict(STREAMS)
-    for message_id in (MAVLINK_MSG_ID_GPS_RAW_INT, MAVLINK_MSG_ID_EKF_STATUS_REPORT):
-        assert veh.message_rates[message_id] == usual[message_id]
+    for message_id in (MAVLINK_MSG_ID_GPS_RAW_INT, MAVLINK_MSG_ID_EKF_STATUS_REPORT, MAVLINK_MSG_ID_VIBRATION):
+        assert veh.message_rates[message_id] == usual.get(message_id, 0)
 
 
 def test_wrong_wheel_radius_and_compass_errors_are_reported_not_proposed(rover):

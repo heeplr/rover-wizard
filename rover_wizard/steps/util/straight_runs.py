@@ -3,11 +3,8 @@ recorded with the GPS reporting faster: for measurements that compare sensors wi
 
 from __future__ import annotations
 
-import contextlib
-
-from ...mavlink_defs import MAVLINK_MSG_ID_EKF_STATUS_REPORT, MAVLINK_MSG_ID_GPS_RAW_INT
+from ...mavlink_defs import MAVLINK_MSG_ID_EKF_STATUS_REPORT, MAVLINK_MSG_ID_GPS_RAW_INT, MAVLINK_MSG_ID_VIBRATION
 from ...motion.driving import ramp_up
-from ...vehicle.link import STREAMS
 from .driving import DEFAULT_RUNWAY_M, RUNWAY_USE_FRACTION
 
 # [%] slow and steady, but faster than walking pace (a GPS course needs some speed)
@@ -18,21 +15,13 @@ STRAIGHT_SECONDS = 8.0
 STOP_SECONDS = 6.0
 # throttle ramps up over this time (no jolt)
 RAMP_SECONDS = 1.5
-# [Hz] during the runs: GPS and EKF reports (normally 2 Hz)
-FAST_RATES_HZ = {MAVLINK_MSG_ID_GPS_RAW_INT: 10, MAVLINK_MSG_ID_EKF_STATUS_REPORT: 10}
+# [Hz] during the runs: GPS, EKF and vibration reports (normally 2 Hz, vibration not at all)
+FAST_RATES_HZ = {MAVLINK_MSG_ID_GPS_RAW_INT: 10, MAVLINK_MSG_ID_EKF_STATUS_REPORT: 10, MAVLINK_MSG_ID_VIBRATION: 5}
 
 
-@contextlib.contextmanager
 def fast_gps_reports(vehicle):
-    """While inside: GPS and EKF reports at FAST_RATES_HZ; afterwards their usual rates again."""
-    for message_id, rate in FAST_RATES_HZ.items():
-        vehicle.set_message_rate(message_id, rate)
-    try:
-        yield
-    finally:
-        usual = dict(STREAMS)
-        for message_id in FAST_RATES_HZ:
-            vehicle.set_message_rate(message_id, usual[message_id])
+    """Context: GPS, EKF and vibration reports at FAST_RATES_HZ; afterwards their usual rates again."""
+    return vehicle.faster_reports(FAST_RATES_HZ)
 
 
 def run_limit(ctx) -> float:

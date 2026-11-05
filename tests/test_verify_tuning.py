@@ -2,6 +2,7 @@
 
 import pytest
 
+from rover_wizard.mavlink_defs import MAVLINK_MSG_ID_VIBRATION
 from rover_wizard.rover_defs import GCS_PID_MASK_STEERING
 
 from util.helpers import act, check, enter, make
@@ -102,3 +103,35 @@ def test_gcs_pid_mask_bits_of_the_pilot_are_kept(vehicles):
     vehicles.append(veh)
     assert veh.get_int("GCS_PID_MASK") == 8
     assert not 8 & GCS_PID_MASK_STEERING
+
+
+def test_a_noisy_gyro_gets_a_lower_error_filter(vehicles):
+    # a very noisy gyro and a high P: the steering output jitters
+    veh, lines = tuning_run(noise=0.3, ATC_STR_RAT_P=0.9, ATC_STR_RAT_FF=1.5)
+    vehicles.append(veh)
+    check("the jitter is noticed", any("jitters" in line for line in lines), "\n".join(lines))
+    # a lower filter is written - unless the loop measured so fast that 5 x its bandwidth isn't below 10 Hz: then
+    # the advice is to lower P
+    lowered = 1.0 <= veh.get("ATC_STR_RAT_FLTE") < 10
+    check("filter lowered or advice given", lowered or any("lower P" in line for line in lines), "\n".join(lines))
+    check("jitter shown", any("output jitter" in line for line in lines))
+
+
+def test_vibration_problems_show_up_in_the_tuning_runs(vehicles):
+    veh, ctx = make()
+    vehicles.append(veh)
+    veh.vibration_level = 70
+    veh.clipping_per_second = 5
+    lines = []
+    ctx.set_output(log=lines.append, on_wait=lambda waiting: None, on_values_changed=lambda: None)
+    ctx.pause = lambda message, during=None: None
+    veh.set_param("TURN_RADIUS", 1.5)
+    ctx.values.update(circle_d=40, runway=40)
+    enter(ctx, "verify")
+    ctx.values.update(rounds=1, r_step=30, v_step=1.0)
+    veh.arm()
+    assert act(ctx, "verify", "STEERING-RATE")
+    assert any("nearly always" in line for line in lines), "\n".join(lines)
+    assert any("clipped" in line for line in lines)
+    # vibration reports are only asked for during the runs
+    assert veh.message_rates[MAVLINK_MSG_ID_VIBRATION] == 0

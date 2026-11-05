@@ -13,6 +13,7 @@ from rover_wizard.motion.step_tuning import (
     StepResponse,
     centred_average,
     step_response_metrics,
+    suggest_error_filter,
 )
 
 from util.helpers import check
@@ -174,3 +175,36 @@ def test_reversing_changes_are_damped_until_tuning_converges():
     check("each swing smaller than the one before", all(b < a for a, b in zip(steps[1:], steps[2:])), steps)
     check("converged", change.converged and "small" in change.reason, change.reason)
     assert steps[-1] < math.log(1 + CONVERGED_CHANGE) * 1.01
+
+
+# ---------------------------------------------------------------------------------------------- error filter
+def test_jitter_of_the_feedback_parts_is_measured():
+    noise = random.Random(4)
+    feedback = [noise.gauss(0, 0.08) for _ in TIMES]
+    result = metrics(first_order(1.0), feedback=feedback)
+    check("jitter measured", 0.06 < result.jitter < 0.1, result.jitter)
+    assert metrics(first_order(1.0)).jitter is None
+
+
+def jittery(jitter=None, noise=0.0, rise_time=0.4):
+    """A step response with this output jitter / measurement noise."""
+    return StepResponse(0.0, 0.0, rise_time, 1.0, target=1.0, noise=noise, jitter=jitter)
+
+
+def test_an_error_filter_well_above_the_loop_bandwidth_is_proposed_for_a_jittery_output():
+    hz, reason = suggest_error_filter(jittery(jitter=0.08), p_gain=0.3, current_hz=10)
+    # bandwidth 1 / (2 pi 0.4 s) = 0.4 Hz, five times that
+    assert hz == pytest.approx(2.0) and "jitters" in reason
+    check("small jitter: nothing", suggest_error_filter(jittery(jitter=0.03), 0.3, 10) == (None, ""))
+    check("never below 1 Hz", suggest_error_filter(jittery(jitter=0.08, rise_time=3.0), 0.3, 0)[0] == 1.0)
+
+
+def test_without_controller_reports_the_jitter_is_p_times_the_noise():
+    assert suggest_error_filter(jittery(noise=0.4), p_gain=0.3, current_hz=10)[0] == pytest.approx(2.0)
+    assert suggest_error_filter(jittery(noise=0.1), p_gain=0.3, current_hz=10) == (None, "")
+
+
+def test_an_already_low_error_filter_gets_advice_instead():
+    hz, reason = suggest_error_filter(jittery(jitter=0.08), p_gain=0.3, current_hz=2.0)
+    assert hz is None and "lower P" in reason
+    assert suggest_error_filter(None, 0.3, 10) == (None, "")
