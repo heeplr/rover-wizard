@@ -200,6 +200,10 @@ PARAM_INDEX_UNKNOWN = 65535
 GPS_RAW_INT_EPH_SCALE = 100
 # GPS_RAW_INT.vel [cm/s] and .cog [cdeg]: UINT16_MAX = unknown
 GPS_RAW_INT_CENTI = 100
+# GPS_RAW_INT.vel_acc is in mm/s
+MILLIMETRES_PER_METRE = 1000
+# WHEEL_DISTANCE.time_usec (and other time_usec fields) are in microseconds
+MICROSECONDS_PER_SECOND = 1_000_000
 # GPS_RAW_INT / GPS2_RAW .yaw [cdeg] (AP_GPS::gps_yaw_cdeg): 0 = the GPS can't measure heading, UINT16_MAX = it can
 # but has none now, else 1..36000 (36000 = north, so that 0 keeps its meaning)
 GPS_YAW_NOT_CONFIGURED = 0

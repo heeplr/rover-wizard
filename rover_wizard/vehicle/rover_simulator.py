@@ -104,6 +104,8 @@ from ..mavlink_defs import (
     GPS_YAW_NORTH,
     GPS_YAW_NOT_CONFIGURED,
     UINT16_MAX,
+    MICROSECONDS_PER_SECOND,
+    MILLIMETRES_PER_METRE,
 )
 from .rc_scaling import pwm_to_stick, stick_to_pwm
 from ..util.rotation import ORIENTATION_NAME_BY_VALUE, rotation_matrix_for_name, transform, transpose
@@ -152,8 +154,16 @@ LOOP_PERIOD = 0.01
 SPEED_NOISE = 0.015
 # [rad/s] standard deviation of the yaw-rate noise
 YAW_RATE_NOISE = 0.01
-# [rad] standard deviation of the GPS course while moving
+# [rad] standard deviation of the GPS course while moving, [m/s] of its speed (also reported as its accuracy)
 GPS_COURSE_NOISE = 0.02
+GPS_SPEED_NOISE = 0.04
+# [m/s] standard deviation of the wheel encoders' speed, [deg] of the compass heading (unless a test sets others)
+DEFAULT_ENCODER_SPEED_NOISE = 0.05
+DEFAULT_COMPASS_NOISE_DEG = 2.0
+# the EKF's velocity and position test ratios (a healthy EKF)
+SIMULATED_EKF_RATIO = 0.1
+PERCENT = 100
+FULL_CIRCLE_DEG = 360
 # the simulated motor needs 8 % before it moves
 MOTOR_DEADZONE = 0.08
 # [s] coasting slows down faster than accelerating speeds up
@@ -354,6 +364,15 @@ class SimVehicle(Vehicle):
         # the GPS measures heading (two antennas), and whether it has a heading right now
         self.gps_measures_heading = False
         self.gps_heading_available = True
+        # [m/s] standard deviation of the wheel encoders' speed (their counts and the wheels slipping)
+        self.encoder_speed_noise = DEFAULT_ENCODER_SPEED_NOISE
+        self._encoder_drift = 0.0
+        self._wheel_report_time: Optional[float] = None
+        # the calibrated compass's heading error [deg]: noise, a constant offset, and an error that changes with the
+        # heading (amplitude of a sine over the heading - what a poor calibration leaves)
+        self.compass_noise_deg = DEFAULT_COMPASS_NOISE_DEG
+        self.compass_offset_deg = 0.0
+        self.compass_heading_dependent_deg = 0.0
         # headings [deg] Large Vehicle MagCal was run with (MAV_CMD_FIXED_MAG_CAL_YAW)
         self.fixed_yaw_calibrations: list = []
         # message id -> rate [Hz] the wizard last asked for with set_message_rate() (0 = default rate)
@@ -648,6 +667,8 @@ class SimVehicle(Vehicle):
             EK3_GPS_CHECK=31,
             EK3_CHECK_SCALE=100,
             EK3_WENC_VERR=0.1,
+            EK3_YAW_M_NSE=0.5,
+            EK3_YAW_I_GATE=300,
             EK3_FLOW_DELAY=10,
             EK3_VIS_VERR_MIN=0.1,
             EK3_VIS_VERR_MAX=0.9,
@@ -964,7 +985,7 @@ class SimVehicle(Vehicle):
         """A drive sample with measurement noise; pilot inputs are only meaningful in Manual/Acro."""
         manual = self.custom_mode in (MODES["MANUAL"], MODES["ACRO"])
         steering, throttle = self._current_sticks() if manual else (0.0, 0.0)
-        return DriveSample(
+        sample = DriveSample(
             time=timebase.now(),
             forward_speed=self.speed + random.gauss(0, SPEED_NOISE),
             yaw_rate=self.yaw_rate + random.gauss(0, self.yaw_rate_noise),
@@ -972,11 +993,14 @@ class SimVehicle(Vehicle):
             throttle_input=throttle,
             north=self.north,
             east=self.east,
-            gps_course=(self._course() + random.gauss(0, GPS_COURSE_NOISE)) if self.gps_fix_type else None,
-            gps_speed=abs(self.speed) if self.gps_fix_type else None,
+            roll=0.0,
+            pitch=0.0,
             steering_pid=self._steering_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_STEERING else None,
             speed_pid=self._speed_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_THROTTLE else None,
         )
+        # GPS, wheel encoders, compass and EKF ratios from the published telemetry, read like the real link does
+        self._add_sensor_readings(sample)
+        return sample
 
     # ------------------------------------------------------------------ physics
     def _motor_test_output(self, instance: int):
@@ -1245,12 +1269,26 @@ class SimVehicle(Vehicle):
             # revolutions = true distance / true radius; reported distance = revolutions x configured radius.
             return self.distance_travelled * radius / self.TRUE_WHEEL_RADIUS
 
-        # Only encoders whose radius parameter exists are reported (boards/firmware may have fewer).
+        # Only encoders whose radius parameter exists are reported (boards/firmware may have fewer). Their speed error
+        # (encoder_speed_noise) accumulates as a small distance error.
+        elapsed = timestamp - self._wheel_report_time if self._wheel_report_time is not None else 0.0
+        self._wheel_report_time = timestamp
+        self._encoder_drift += random.gauss(0, self.encoder_speed_noise * elapsed) if elapsed > 0 else 0.0
         distances = [
-            reported_distance(self.get(name)) for name in ("WENC_RADIUS", "WENC2_RADIUS") if self.has_parameter(name)
+            reported_distance(self.get(name)) + self._encoder_drift
+            for name in ("WENC_RADIUS", "WENC2_RADIUS")
+            if self.has_parameter(name)
         ]
-        self._store_message("WHEEL_DISTANCE", SimpleNamespace(count=len(distances), distance=distances), timestamp)
-        self._store_message("SCALED_IMU", self._scaled_imu(), timestamp)
+        self._store_message(
+            "WHEEL_DISTANCE",
+            SimpleNamespace(
+                time_usec=round(timestamp * MICROSECONDS_PER_SECOND), count=len(distances), distance=distances
+            ),
+            timestamp,
+        )
+        imu = self._scaled_imu()
+        imu.xmag, imu.ymag, imu.zmag = self._calibrated_compass_field()
+        self._store_message("SCALED_IMU", imu, timestamp)
         # heading wrapped to -pi..pi, as ArduPilot reports ATTITUDE.yaw
         yaw = math.atan2(math.sin(self.heading), math.cos(self.heading))
         self._store_message(
@@ -1275,8 +1313,9 @@ class SimVehicle(Vehicle):
                     eph=90,
                     # GPS_RAW_INT.lat is in degE7
                     lat=int(self.LATITUDE_DEG * 1e7),
-                    vel=round(abs(self.speed) * GPS_RAW_INT_CENTI),
-                    cog=round(math.degrees(self._course()) * GPS_RAW_INT_CENTI),
+                    vel=round(max(0.0, abs(self.speed) + random.gauss(0, GPS_SPEED_NOISE)) * GPS_RAW_INT_CENTI),
+                    cog=round(self._noisy_course_deg() * GPS_RAW_INT_CENTI),
+                    vel_acc=round(GPS_SPEED_NOISE * MILLIMETRES_PER_METRE),
                     yaw=self._gps_yaw(),
                 ),
                 timestamp,
@@ -1305,9 +1344,17 @@ class SimVehicle(Vehicle):
             ),
             timestamp,
         )
+        # the EKF's compass test ratio: heading innovation / (gate x expected noise), its others steady and low
+        gate = self.get("EK3_YAW_I_GATE") / PERCENT
+        compass_ratio = abs(math.radians(self._compass_heading_error_deg())) / (gate * self.get("EK3_YAW_M_NSE"))
         self._store_message(
             "EKF_STATUS_REPORT",
-            SimpleNamespace(flags=EKF_ATTITUDE | EKF_VELOCITY_HORIZ | EKF_POS_HORIZ_REL | EKF_POS_HORIZ_ABS),
+            SimpleNamespace(
+                flags=EKF_ATTITUDE | EKF_VELOCITY_HORIZ | EKF_POS_HORIZ_REL | EKF_POS_HORIZ_ABS,
+                velocity_variance=SIMULATED_EKF_RATIO,
+                pos_horiz_variance=SIMULATED_EKF_RATIO,
+                compass_variance=compass_ratio,
+            ),
             timestamp,
         )
 
@@ -1445,6 +1492,25 @@ class SimVehicle(Vehicle):
             sum(abs(percent) / 100 * self.MOTOR_TEST_FULL_POWER_CA for percent in list(self._motor_test_power.values()))
             / SYS_STATUS_CENTIAMPS_PER_AMP
         )
+
+    def _compass_heading_error_deg(self) -> float:
+        """The calibrated compass's heading error now [deg] (without its noise)."""
+        return self.compass_offset_deg + self.compass_heading_dependent_deg * math.sin(self.heading)
+
+    def _calibrated_compass_field(self) -> tuple:
+        """SCALED_IMU magnetic field [mGauss]: the calibrated compass (as ArduPilot uses it) of the level vehicle at
+        its heading - magnetic = true heading - COMPASS_DEC - with the compass's heading error."""
+        error = self._compass_heading_error_deg() + random.gauss(0, self.compass_noise_deg)
+        magnetic = self.heading - self.get("COMPASS_DEC") + math.radians(error)
+        return (
+            round(self.EARTH_FIELD_NORTH * math.cos(magnetic)),
+            round(-self.EARTH_FIELD_NORTH * math.sin(magnetic)),
+            round(self.EARTH_FIELD_DOWN),
+        )
+
+    def _noisy_course_deg(self) -> float:
+        """The course as the GPS measures it [deg, 0..360]."""
+        return math.degrees(self._course() + random.gauss(0, GPS_COURSE_NOISE)) % FULL_CIRCLE_DEG
 
     def _course(self) -> float:
         """Course over ground [rad, 0..2pi]: the heading, or its opposite when reversing."""

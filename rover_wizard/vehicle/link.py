@@ -92,6 +92,8 @@ from ..mavlink_defs import (
     RC_CHANNELS_MAX,
     UINT16_MAX,
     GPS_RAW_INT_CENTI,
+    MICROSECONDS_PER_SECOND,
+    MILLIMETRES_PER_METRE,
     GPS_YAW_NOT_CONFIGURED,
     SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
 )
@@ -248,6 +250,16 @@ class PidSample:
         return self.ff + self.p + self.i + self.d
 
 
+@dataclass(frozen=True)
+class EkfRatios:
+    """The EKF's innovation test ratios (EKF_STATUS_REPORT, AP_NavEKF3 getVariances): how far each sensor
+    disagrees with the EKF, relative to what it accepts - at 1.0 it rejects the sensor's data."""
+
+    velocity: float
+    position: float
+    compass: float
+
+
 @dataclass
 class DriveSample:
     """What the vehicle was doing at one moment of a drive test."""
@@ -270,9 +282,19 @@ class DriveSample:
     run_time: float = 0.0
     # what the wizard commanded at this moment (open-loop or guided)
     command: Optional[tuple] = None
-    # course over ground [rad, 0 = north, clockwise] and ground speed [m/s] as the GPS measures them
+    # course over ground [rad, 0 = north, clockwise] and ground speed [m/s] as the GPS measures them, and the
+    # accuracy it reports for that speed [m/s] (None: not reported)
     gps_course: Optional[float] = None
     gps_speed: Optional[float] = None
+    gps_speed_accuracy: Optional[float] = None
+    # the wheel encoders' distances [m] and when the flight controller counted them [s, its own clock]
+    wheel_distances: Optional[tuple] = None
+    wheel_time: Optional[float] = None
+    # the first compass's field in the vehicle's axes [mGauss] (calibrated, as ArduPilot uses it), and the tilt [rad]
+    magnetic_field: Optional[tuple] = None
+    roll: Optional[float] = None
+    pitch: Optional[float] = None
+    ekf_ratios: Optional[EkfRatios] = None
     # the steering-rate and speed controllers' reports (only while their PID_TUNING is switched on)
     steering_pid: Optional[PidSample] = None
     speed_pid: Optional[PidSample] = None
@@ -1241,6 +1263,26 @@ class Vehicle:
             return None
         return PidSample(unit(report.desired), unit(report.achieved), report.FF, report.P, report.I, report.D)
 
+    def _add_sensor_readings(self, sample: DriveSample) -> None:
+        """GPS speed and course, wheel encoders, compass and the EKF's test ratios, as far as they are fresh."""
+        gps = self.latest("GPS_RAW_INT", max_age=TELEMETRY_FRESH_SECONDS)
+        if gps is not None and UINT16_MAX not in (gps.vel, gps.cog):
+            sample.gps_speed = gps.vel / GPS_RAW_INT_CENTI
+            sample.gps_course = math.radians(gps.cog / GPS_RAW_INT_CENTI)
+            # vel_acc [mm/s], 0 = not reported (MAVLink 2 extension)
+            accuracy = getattr(gps, "vel_acc", 0) or 0
+            sample.gps_speed_accuracy = accuracy / MILLIMETRES_PER_METRE if accuracy else None
+        wheels = self.latest("WHEEL_DISTANCE", max_age=TELEMETRY_FRESH_SECONDS)
+        if wheels is not None and wheels.count:
+            sample.wheel_distances = tuple(wheels.distance[: wheels.count])
+            sample.wheel_time = wheels.time_usec / MICROSECONDS_PER_SECOND
+        imu = self.latest("SCALED_IMU", max_age=TELEMETRY_FRESH_SECONDS)
+        if imu is not None and (imu.xmag or imu.ymag or imu.zmag):
+            sample.magnetic_field = (imu.xmag, imu.ymag, imu.zmag)
+        ekf = self.latest("EKF_STATUS_REPORT", max_age=TELEMETRY_FRESH_SECONDS)
+        if ekf is not None and hasattr(ekf, "compass_variance"):
+            sample.ekf_ratios = EkfRatios(ekf.velocity_variance, ekf.pos_horiz_variance, ekf.compass_variance)
+
     def sample(self) -> DriveSample:
         """One snapshot of speed, turn rate, pilot inputs and position for the drive-test analyses."""
         steering, throttle = self.rc_inputs()
@@ -1248,14 +1290,12 @@ class Vehicle:
         attitude = self.latest("ATTITUDE", max_age=TELEMETRY_FRESH_SECONDS)
         position = self.latest("LOCAL_POSITION_NED", max_age=TELEMETRY_FRESH_SECONDS)
         hud = self.latest("VFR_HUD", max_age=TELEMETRY_FRESH_SECONDS)
-        gps = self.latest("GPS_RAW_INT", max_age=TELEMETRY_FRESH_SECONDS)
-        if gps is not None and UINT16_MAX not in (gps.vel, gps.cog):
-            sample.gps_speed = gps.vel / GPS_RAW_INT_CENTI
-            sample.gps_course = math.radians(gps.cog / GPS_RAW_INT_CENTI)
+        self._add_sensor_readings(sample)
         sample.steering_pid = self._pid_sample(PID_TUNING_STEER, math.radians)
         sample.speed_pid = self._pid_sample(PID_TUNING_ACCZ)
         if attitude is not None:
             sample.yaw_rate = attitude.yawspeed
+            sample.roll, sample.pitch = attitude.roll, attitude.pitch
             if position is not None:
                 # Project the north/east velocity onto the heading: forward speed = vN·cos(yaw) + vE·sin(yaw).
                 # This keeps the sign (negative when reversing), unlike the ground speed.

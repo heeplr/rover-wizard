@@ -35,7 +35,7 @@ def rc(steering_pwm, throttle_pwm, count=8):
 
 def test_speed_along_the_heading_from_the_position_estimate():
     vehicle = vehicle_with(
-        ATTITUDE={"yaw": EAST, "yawspeed": 0.3},
+        ATTITUDE={"yaw": EAST, "roll": 0.0, "pitch": 0.0, "yawspeed": 0.3},
         LOCAL_POSITION_NED={"x": 12.0, "y": 34.0, "vx": 0.0, "vy": 2.0},
         RC_CHANNELS=rc(1700, 1900),
     )
@@ -48,7 +48,7 @@ def test_speed_along_the_heading_from_the_position_estimate():
 
 def test_driving_backwards_shows_as_negative_speed():
     vehicle = vehicle_with(
-        ATTITUDE={"yaw": EAST, "yawspeed": 0.0},
+        ATTITUDE={"yaw": EAST, "roll": 0.0, "pitch": 0.0, "yawspeed": 0.0},
         LOCAL_POSITION_NED={"x": 0.0, "y": 0.0, "vx": 0.0, "vy": -1.5},
         RC_CHANNELS=rc(1500, 1100),
     )
@@ -59,7 +59,9 @@ def test_driving_backwards_shows_as_negative_speed():
 def test_without_a_position_estimate_the_ground_speed_is_signed_by_the_throttle(throttle_pwm, expected):
     # VFR_HUD's ground speed has no sign: the throttle stick tells whether the vehicle reverses
     vehicle = vehicle_with(
-        ATTITUDE={"yaw": 0.0, "yawspeed": 0.1}, VFR_HUD={"groundspeed": 1.2}, RC_CHANNELS=rc(1500, throttle_pwm)
+        ATTITUDE={"yaw": 0.0, "roll": 0.0, "pitch": 0.0, "yawspeed": 0.1},
+        VFR_HUD={"groundspeed": 1.2},
+        RC_CHANNELS=rc(1500, throttle_pwm),
     )
     sample = vehicle.sample()
     assert sample.forward_speed == pytest.approx(expected)
@@ -89,7 +91,7 @@ def test_last_text_finds_the_newest_matching_message():
 
 def test_controller_reports_become_part_of_the_drive_samples():
     # Rover's PID_TUNING: the steering controller in deg/s, the speed controller in m/s (GCS_MAVLINK_Rover)
-    vehicle = vehicle_with(ATTITUDE={"yaw": EAST, "pitch": 0.0, "yawspeed": 0.3})
+    vehicle = vehicle_with(ATTITUDE={"yaw": EAST, "roll": 0.0, "pitch": 0.0, "yawspeed": 0.3})
     steering = {"desired": 30.0, "achieved": 27.0, "FF": 0.4, "P": 0.05, "I": 0.1, "D": 0.0}
     speed = {"desired": 1.2, "achieved": 1.1, "FF": 0.3, "P": 0.02, "I": 0.01, "D": 0.0}
     vehicle._store_message(pid_tuning_key(PID_TUNING_STEER), SimpleNamespace(axis=PID_TUNING_STEER, **steering))
@@ -100,4 +102,26 @@ def test_controller_reports_become_part_of_the_drive_samples():
     assert sample.steering_pid.output == pytest.approx(0.55)
     assert (sample.speed_pid.desired, sample.speed_pid.output) == pytest.approx((1.2, 0.33))
     # without reports
-    assert vehicle_with(ATTITUDE={"yaw": EAST, "pitch": 0.0, "yawspeed": 0.3}).sample().steering_pid is None
+    assert (
+        vehicle_with(ATTITUDE={"yaw": EAST, "roll": 0.0, "pitch": 0.0, "yawspeed": 0.3}).sample().steering_pid is None
+    )
+
+
+def test_sensor_readings_for_the_ekf_checks():
+    vehicle = vehicle_with(
+        ATTITUDE={"yaw": EAST, "roll": 0.02, "pitch": -0.01, "yawspeed": 0.0},
+        GPS_RAW_INT={"vel": 150, "cog": 9000, "vel_acc": 80},
+        WHEEL_DISTANCE={"time_usec": 12_500_000, "count": 2, "distance": [3.5, 3.7] + [0.0] * 14},
+        SCALED_IMU={"xmag": 120, "ymag": -200, "zmag": 400},
+        EKF_STATUS_REPORT={"velocity_variance": 0.1, "pos_horiz_variance": 0.2, "compass_variance": 0.3},
+    )
+    sample = vehicle.sample()
+    assert (sample.gps_speed, sample.gps_speed_accuracy) == pytest.approx((1.5, 0.08))
+    assert sample.gps_course == pytest.approx(math.pi / 2)
+    assert (sample.wheel_distances, sample.wheel_time) == ((3.5, 3.7), 12.5)
+    assert sample.magnetic_field == (120, -200, 400)
+    assert (sample.roll, sample.pitch) == (0.02, -0.01)
+    assert (sample.ekf_ratios.velocity, sample.ekf_ratios.position, sample.ekf_ratios.compass) == (0.1, 0.2, 0.3)
+    # a GPS that doesn't report its speed accuracy
+    vehicle._store_message("GPS_RAW_INT", SimpleNamespace(vel=150, cog=9000, vel_acc=0))
+    assert vehicle.sample().gps_speed_accuracy is None

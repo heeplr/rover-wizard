@@ -20,6 +20,7 @@ from .util.driving import (
 )
 from ..model import Action, Step, param_field, value_field
 from .util.rover_hardware import is_motorised
+from .util.ekf_measurement import EKF_ACTION, ekf_fields, log_ekf_health
 
 DEFAULT_TUNING_ROUNDS = 6
 MAX_TUNING_ROUNDS = 15
@@ -239,6 +240,7 @@ def _tune_by_step_response(
             )
             change = tuner.next_gains(response)
             ctx.log(f"Round {round_number}: {_describe(controller, response)} -> {change.reason}")
+            log_ekf_health(ctx, samples)
             aimed = response.target if response else None
             if aimed is not None and abs(aimed) < AIMED_BELOW_REQUESTED * abs(target):
                 ctx.log(
@@ -368,6 +370,9 @@ STEP = Step(
     "Closed-loop verification & fine tuning",
     [
         who_drives_field("how_verify"),
+    ]
+    + ekf_fields()
+    + [
         value_field(
             "rounds",
             "Max refinement rounds",
@@ -385,6 +390,8 @@ STEP = Step(
         param_field("ATC_STR_RAT_I", "Steering rate I"),
     ],
     [
+        # first: Guided mode relies on the EKF's heading and position
+        EKF_ACTION,
         Action("Verify & tune SPEED controller", action_verify_speed_controller, armed=True),
         Action("Verify & tune STEERING-RATE controller", action_verify_steering_controller, armed=True),
     ],
