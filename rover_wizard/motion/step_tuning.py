@@ -14,6 +14,8 @@ What makes it robust against real data:
   gains are left alone.
 * A steady-state error is corrected through FF where it can be (the output the vehicle needed, per unit achieved):
   ArduPilot's rate controllers rely on FF for it, I only builds up slowly within a short step.
+* When measurement noise makes the controller's output jitter, an error filter (FLTE) well above the loop's
+  bandwidth is proposed (suggest_error_filter).
 * A gain whose change reverses the previous round's direction changes only half as much (in proportion) as before,
   so noisy rounds don't make the gains swing up and down; tuning ends once the changes have become small.
 """
@@ -64,6 +66,16 @@ SMALL_ERROR_FACTORS = (1.0, 1.25)
 FF_MAX_FACTOR = 2.0
 # each reversal of a gain's direction shrinks its changes (in log space, i.e. the exponent of its factor) by this
 REVERSAL_DAMPING = 0.5
+# [s] the P and D parts' jitter is measured around their average over this window
+JITTER_WINDOW_SECONDS = 0.5
+# the output may jitter by this much (one standard deviation, of full output) before an error filter is proposed
+JITTER_MAX = 0.05
+# an error filter this many times above the control loop's bandwidth hardly delays the control
+FILTER_BANDWIDTH_FACTOR = 5
+# [Hz] never proposed lower
+ERROR_FILTER_MIN_HZ = 1.0
+# a proposal must be below this fraction of the current filter to count
+FILTER_CLEARLY_LOWER = 0.9
 # changes of every gain within ±3 %: tuning has converged
 CONVERGED_CHANGE = 0.03
 
@@ -91,6 +103,9 @@ class StepResponse:
     saturated: bool = False
     # mean controller output (FF + P + I + D) over the end of the step, None if not reported
     output: Optional[float] = None
+    # how much the controller's P and D parts jitter over the end of the step (standard deviation, in output units
+    # -1..1): noise in the measurement passed on to the actuator; None without the controller's reports
+    jitter: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -131,11 +146,12 @@ def step_response_metrics(
     step_off: float,
     desired: Optional[list] = None,
     outputs: Optional[list] = None,
+    feedback: Optional[list] = None,
 ) -> Optional[StepResponse]:
     """Overshoot, steady-state error and rise time of `values` following a step to `target` between the two times.
 
-    `desired` (ArduPilot's own target per sample) and `outputs` (its controller output per sample) are optional,
-    entries may be None.
+    `desired` (ArduPilot's own target per sample), `outputs` (its controller output per sample) and `feedback` (the
+    output's P + D part per sample) are optional, entries may be None.
     """
     # Mirror negative steps so the maths below only has to handle a positive target.
     direction = 1 if target > 0 else -1
@@ -202,7 +218,44 @@ def step_response_metrics(
         measured_error=measured_error,
         saturated=saturated,
         output=sum(tail_outputs) / len(tail_outputs) if tail_outputs else None,
+        jitter=_jitter(times, feedback, tail_start, step_off) if feedback else None,
     )
+
+
+def _jitter(times: list, feedback: list, start: float, end: float) -> Optional[float]:
+    """Standard deviation of the feedback parts around their own (centred) average between start and end."""
+    pairs = []
+    for time, part in zip(times, feedback):
+        # each report once: samples come faster than the reports, and a repeated one would hide the jitter
+        if part is not None and start <= time <= end and (not pairs or part != pairs[-1][1]):
+            pairs.append((time, part))
+    if len(pairs) < STEP_MIN_SAMPLES:
+        return None
+    pair_times = [time for time, _ in pairs]
+    parts = [part for _, part in pairs]
+    averages = centred_average(pair_times, parts, JITTER_WINDOW_SECONDS)
+    return math.sqrt(sum((part - average) ** 2 for part, average in zip(parts, averages)) / len(parts))
+
+
+def suggest_error_filter(response: Optional[StepResponse], p_gain: float, current_hz: float) -> tuple:
+    """(error filter frequency [Hz] to propose or None, why) when noise makes the controller's output jitter.
+
+    The jitter is the controller's own (from its reports), else estimated as P x measurement noise. Above
+    JITTER_MAX, an error filter (FLTE) at FILTER_BANDWIDTH_FACTOR times the loop's bandwidth (from the measured rise
+    time: 1 / (2 pi t63)) takes out the noise while delaying the control hardly at all - a lower filter would add
+    lag the loop notices. Proposed only if it is clearly below the current filter.
+    """
+    if response is None or response.rise_time_63 is None:
+        return None, ""
+    jitter = response.jitter if response.jitter is not None else p_gain * response.noise
+    if jitter <= JITTER_MAX:
+        return None, ""
+    bandwidth = 1 / (2 * math.pi * response.rise_time_63)
+    proposal = max(ERROR_FILTER_MIN_HZ, round(FILTER_BANDWIDTH_FACTOR * bandwidth, 1))
+    shown = f"the output jitters by ±{jitter:.0%} from measurement noise"
+    if current_hz and proposal >= current_hz * FILTER_CLEARLY_LOWER:
+        return None, f"{shown}, and the error filter is already at {current_hz:g} Hz: lower P, or reduce vibration"
+    return proposal, f"{shown} -> error filter {proposal:g} Hz"
 
 
 class GainTuner:
