@@ -7,6 +7,7 @@ import asyncio
 import threading
 import time
 import os
+import re
 
 import pytest
 
@@ -944,3 +945,29 @@ def test_hidden_parameters_are_named():
 
 def test_action_buttons_have_help():
     asyncio.run(action_help_scenario())
+
+
+async def save_log_scenario(size):
+    """Save Log writes the log so far, as plain text, to a timestamped file in the progress folder."""
+    app = WizardApp(demo="rover")
+    async with app.run_test(size=size) as pilot:
+        screen, ctx, vehicle = await start(pilot, app)
+        ctx.log("Round 1: overshoot [b]0%[/b] - a line with brackets")
+        await pilot.pause(0.2)
+        before = set(os.listdir(ctx.store.root))
+        await click(pilot, screen.query_one("#b-savelog", Button))
+        saved = await until(pilot, lambda: set(os.listdir(ctx.store.root)) - before)
+        check("a log file is saved", saved)
+        (name,) = set(os.listdir(ctx.store.root)) - before
+        check("named by the time", re.fullmatch(r"log-\d{14}\.log", name), name)
+        path = os.path.join(ctx.store.root, name)
+        text = open(path, encoding="utf-8").read()
+        check("plain text, as shown", "Round 1: overshoot [b]0%[/b] - a line with brackets" in text, text[-300:])
+        check("the welcome line too", text.startswith("Welcome to the rover-wizard."), text[:100])
+        check("the path is logged", path in screen.activity_log.lines[-1], screen.activity_log.lines[-1])
+        vehicle.disconnect()
+
+
+@pytest.mark.parametrize("size", [SIZE, (120, 40)], ids=["wide", "120x40"])
+def test_save_log(size):
+    asyncio.run(save_log_scenario(size))

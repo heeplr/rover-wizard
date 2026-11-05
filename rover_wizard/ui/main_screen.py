@@ -30,6 +30,7 @@ from ..steps.barometer import barometer_in_use
 from ..steps.steering_output import steering_kind
 from ..steps.relays import toggle_relay
 from .step_catalog import STEPS
+from ..session.activity_log import ActivityLog
 from ..session.store import STEP_DONE, STEP_SKIPPED
 from ..util.values import escape_markup, format_value
 from .param_docs import describe
@@ -77,6 +78,8 @@ class MainScreen(Screen):
         self.by_key: dict = {}
         # help button id -> (title, markdown)
         self.help: dict = {}
+        # what the activity log shows, as plain text for Save Log
+        self.activity_log = ActivityLog()
         # action button id -> Action
         self.actions: dict = {}
         # field key -> values offered by its Select
@@ -124,6 +127,7 @@ class MainScreen(Screen):
                     yield Button("Disarm", id="b-disarm")
                     yield Button("♻ Reboot FC", id="b-reboot")
                     yield Button("🛑 STOP", id="b-stop", variant="error")
+                    yield Button("Save Log", id="b-savelog")
                 yield RichLog(id="log", wrap=True, markup=True, highlight=False, min_width=LOG_MIN_WIDTH)
         yield Footer()
 
@@ -183,6 +187,17 @@ class MainScreen(Screen):
     def _write_log(self, text: str) -> None:
         """Append one line to the activity log."""
         self.query_one("#log", RichLog).write(text)
+        self.activity_log.add(text)
+
+    def _save_log(self) -> None:
+        """Save the activity log so far to a timestamped file in the progress folder, and say where."""
+        path = self.ctx.store.log_path()
+        try:
+            self.activity_log.save(path)
+        except OSError as error:
+            self._write_log(escape_markup(f"Could not save the log to {path}: {error}"))
+            return
+        self._write_log(escape_markup(f"Log saved to {path}"))
 
     def _set_waiting(self, waiting: bool) -> None:
         """Enable Continue only while an action waits for the pilot."""
@@ -517,6 +532,8 @@ class MainScreen(Screen):
         elif button_id == "b-stop":
             ctx.emergency()
             self._write_log("🛑 STOP: overrides released, Hold mode + disarm commanded.")
+        elif button_id == "b-savelog":
+            self._save_log()
         elif button_id.startswith("nav-"):
             target = int(button_id[len("nav-") :])
             if self.flow.does_apply(target) and self.flow.is_reachable(target) and self._is_idle():

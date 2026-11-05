@@ -140,3 +140,7 @@ class Store:
     def backup_path(self) -> str:
         """Full path for a new, timestamped parameter-backup file."""
         return os.path.join(self.root, time.strftime("params_backup_%Y%m%d_%H%M%S.param"))
+
+    def log_path(self) -> str:
+        """Full path for a new, timestamped file with the activity log (log-YYYYMMDDhhmmss.log)."""
+        return os.path.join(self.root, time.strftime("log-%Y%m%d%H%M%S.log"))
