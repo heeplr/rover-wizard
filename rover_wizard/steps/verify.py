@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional
 
-from ..motion.analysis import step_response_metrics, suggest_pi_gains
+from ..motion.step_tuning import GainTuner, step_response_metrics
+from ..rover_defs import GCS_PID_MASK_STEERING, GCS_PID_MASK_THROTTLE, GRAVITY, STEER_SPEED_MIN, TURN_MAX_G_MIN
 from ..util.errors import VehicleError
 from ..util.values import format_value
 from .util.driving import (
@@ -18,13 +21,22 @@ from .util.driving import (
 from ..model import Action, Step, param_field, value_field
 from .util.rover_hardware import is_motorised
 
-DEFAULT_TUNING_ROUNDS = 3
+DEFAULT_TUNING_ROUNDS = 6
+MAX_TUNING_ROUNDS = 15
+
+# ArduPilot aimed for less than 95 % of the requested target: say why
+AIMED_BELOW_REQUESTED = 0.95
+# ... naming the limit within 5 % of what it aimed for
+LIMIT_MATCH = 0.05
 
 # [m/s]
 DEFAULT_SPEED_STEP = 1.0
 
 # [deg/s]
 DEFAULT_YAW_RATE_STEP_DEG = 45
+
+# [Hz] samples per second of a tuning run: more samples average the noise of a gyro better
+TUNING_SAMPLE_RATE_HZ = 20
 
 # manual tracking report: ignore stick inputs below 20 % (noise, dead-band)
 TRACKING_MIN_INPUT_FRACTION = 0.2
@@ -152,55 +164,132 @@ def _manual_tracking_report(ctx):
         )
 
 
+@dataclass(frozen=True)
+class _Controller:
+    """One of ArduPilot's controllers the step tunes, and how its step responses are read."""
+
+    # DriveSample attributes: the controlled quantity and the controller's own report (PID_TUNING)
+    measured: str
+    report: str
+    # GCS_PID_MASK bit that switches the report on
+    report_mask: int
+    # tuner gain ("p", "i", "ff") -> parameter
+    gains: dict
+    # [s] slower to 63 % of the target counts as too slow
+    slow_rise_time: float
+    # how values are shown: unit and conversion from the measured unit
+    unit: str
+    shown: Callable = float
+
+
+STEERING_CONTROLLER = _Controller(
+    "yaw_rate",
+    "steering_pid",
+    GCS_PID_MASK_STEERING,
+    {"ff": "ATC_STR_RAT_FF", "p": "ATC_STR_RAT_P", "i": "ATC_STR_RAT_I"},
+    slow_rise_time=1.0,
+    unit="deg/s",
+    shown=math.degrees,
+)
+# the speed controller's feed-forward comes from CRUISE_SPEED / CRUISE_THROTTLE (measured on the gains step)
+SPEED_CONTROLLER = _Controller(
+    "forward_speed",
+    "speed_pid",
+    GCS_PID_MASK_THROTTLE,
+    {"p": "ATC_SPEED_P", "i": "ATC_SPEED_I"},
+    slow_rise_time=3.0,
+    unit="m/s",
+)
+
+
 def _tune_by_step_response(
     ctx,
+    controller: _Controller,
     run_step,
-    measured_attribute: str,
     target: float,
     step_on: float,
     step_off: float,
-    p_name: str,
-    i_name: str,
-    slow_rise_time: float,
     between_rounds: str,
+    limit_note=None,
 ) -> None:
-    """Repeat: run a step test, measure the response, adjust P/I - until it tracks well or rounds run out."""
+    """Repeat: run a step test, measure the response, adjust the gains - until it tracks well, the changes have
+    become small, the gains can't help (output at its limit) or the rounds run out. limit_note(aimed) explains why
+    ArduPilot aimed for less than requested."""
+    current = {key: ctx.param_value(name) for key, name in controller.gains.items()}
+    missing = [controller.gains[key] for key, value in current.items() if value is None]
+    if missing:
+        raise VehicleError(f"{' / '.join(missing)} do not exist on this firmware - tune them manually.")
+
+    tuner = GainTuner(current, controller.slow_rise_time)
     rounds = int(ctx.number("rounds", DEFAULT_TUNING_ROUNDS))
-    for round_number in range(1, rounds + 1):
-        samples = run_step()
-        response = step_response_metrics(
-            [sample.run_time for sample in samples],
-            [getattr(sample, measured_attribute) for sample in samples],
-            target,
-            step_on,
-            step_off,
-        )
-        p_gain = ctx.param_value(p_name)
-        i_gain = ctx.param_value(i_name)
-        if p_gain is None or i_gain is None:
-            raise VehicleError(f"{p_name} / {i_name} do not exist on this firmware - tune them manually.")
-
-        suggestion = suggest_pi_gains(response, p_gain, i_gain, slow_rise_time)
-        if response:
-            ctx.log(
-                # Fractions are shown as percentages (x 100).
-                f"Round {round_number}: overshoot {response.overshoot * 100:.0f}%, t63 "
-                f"{format_value(response.rise_time_63)} s, steady-state error "
-                f"{response.steady_state_error:.0%} -> {suggestion.reason}"
+    with ctx.vehicle.controller_reports(controller.report_mask) as reporting:
+        if not reporting:
+            ctx.log("i No GCS_PID_MASK: the responses are compared with the requested target only.")
+        for round_number in range(1, rounds + 1):
+            samples = run_step()
+            reports = [getattr(sample, controller.report) for sample in samples]
+            response = step_response_metrics(
+                [sample.run_time for sample in samples],
+                [getattr(sample, controller.measured) for sample in samples],
+                target,
+                step_on,
+                step_off,
+                desired=[report and report.desired for report in reports],
+                outputs=[report and report.output for report in reports],
             )
-        else:
-            ctx.log(f"Round {round_number}: {suggestion.reason}")
+            change = tuner.next_gains(response)
+            ctx.log(f"Round {round_number}: {_describe(controller, response)} -> {change.reason}")
+            aimed = response.target if response else None
+            if aimed is not None and abs(aimed) < AIMED_BELOW_REQUESTED * abs(target):
+                ctx.log(
+                    f"  ArduPilot aimed for {controller.shown(aimed):.3g} instead of {controller.shown(abs(target)):.3g}"
+                    f" {controller.unit}" + (f" ({limit_note(aimed)})" if limit_note else "")
+                )
+            if change.blocked or change.converged:
+                break
 
-        if suggestion.converged or response is None:
-            break
+            for key, name in controller.gains.items():
+                new = round(change.gains[key], GAIN_DECIMALS)
+                if new != round(current[key], GAIN_DECIMALS):
+                    ctx.set_param(name, new)
+                    ctx.set_values(**{name: new})
+                current[key] = new
+            if round_number < rounds:
+                ctx.pause(between_rounds)
 
-        new_p = round(suggestion.p_gain, GAIN_DECIMALS)
-        new_i = round(suggestion.i_gain, GAIN_DECIMALS)
-        ctx.set_param(p_name, new_p)
-        ctx.set_param(i_name, new_i)
-        ctx.set_values(**{p_name: new_p, i_name: new_i})
-        if round_number < rounds:
-            ctx.pause(between_rounds)
+
+def _describe(controller: _Controller, response) -> str:
+    """One round's measurements for the log."""
+    if response is None:
+        return "no usable data"
+    shown = controller.shown
+    return (
+        # Fractions are shown as percentages (x 100).
+        f"overshoot {response.overshoot * 100:.0f}%, t63 {format_value(response.rise_time_63)} s, steady-state error "
+        f"{response.steady_state_error:.0%} (aimed at {shown(response.target):.3g} {controller.unit}, noise "
+        f"±{shown(response.noise):.2g} {controller.unit})"
+    )
+
+
+def _steering_limit_note(ctx, speed: float):
+    """For the log: which of ArduPilot's limits keeps the turn-rate target below the requested one."""
+
+    def note(aimed: float) -> str:
+        """The limit closest to what ArduPilot aimed for."""
+        limits = []
+        rate_max = ctx.param_value("ATC_STR_RAT_MAX", 0) or 0
+        if rate_max > 0:
+            limits.append((math.radians(rate_max), f"ATC_STR_RAT_MAX = {rate_max:g} deg/s"))
+        turn_max_g = ctx.param_value("ATC_TURN_MAX_G", 0) or 0
+        # AR_AttitudeControl: lateral acceleration / speed, at least 0.1 g and 1 m/s
+        rate = max(turn_max_g, TURN_MAX_G_MIN) * GRAVITY / max(speed, STEER_SPEED_MIN)
+        limits.append((rate, f"ATC_TURN_MAX_G = {turn_max_g:g} g at {max(speed, STEER_SPEED_MIN):g} m/s"))
+        nearest, name = min(limits, key=lambda limit: abs(limit[0] - aimed))
+        if abs(nearest - aimed) <= LIMIT_MATCH * nearest:
+            return f"limited by {name}"
+        return "ATC_STR_ACC_MAX may not let it build up within the step"
+
+    return note
 
 
 def action_verify_speed_controller(ctx):
@@ -223,18 +312,16 @@ def action_verify_speed_controller(ctx):
     step_end = STEP_LEAD_SECONDS + hold
     _tune_by_step_response(
         ctx,
+        SPEED_CONTROLLER,
         lambda: ctx.drive.run_guided(
             lambda t: (target if STEP_LEAD_SECONDS <= t < step_end else 0.0, 0.0),
             step_end + STEP_STOP_SECONDS,
             limit_m=runway * STEP_RUNWAY_FRACTION,
+            hz=TUNING_SAMPLE_RATE_HZ,
         ),
-        "forward_speed",
         target,
         STEP_LEAD_SECONDS,
         step_end,
-        "ATC_SPEED_P",
-        "ATC_SPEED_I",
-        slow_rise_time=3.0,
         between_rounds="Bring the vehicle back to the start and press Continue for the next round.",
     )
 
@@ -261,19 +348,18 @@ def action_verify_steering_controller(ctx):
     # Timeline of one round: straight, then turning at `rate`, then straight again.
     _tune_by_step_response(
         ctx,
+        STEERING_CONTROLLER,
         lambda: ctx.drive.run_guided(
             lambda t: (speed, rate if YAW_STEP_START_SECONDS <= t < YAW_STEP_END_SECONDS else 0.0),
             YAW_STEP_RUN_SECONDS,
             limit_m=circle,
+            hz=TUNING_SAMPLE_RATE_HZ,
         ),
-        "yaw_rate",
         rate,
         YAW_STEP_START_SECONDS,
         YAW_STEP_END_SECONDS,
-        "ATC_STR_RAT_P",
-        "ATC_STR_RAT_I",
-        slow_rise_time=1.0,
         between_rounds="Reposition the vehicle and press Continue for the next round.",
+        limit_note=_steering_limit_note(ctx, speed),
     )
 
 
@@ -283,12 +369,18 @@ STEP = Step(
     [
         who_drives_field("how_verify"),
         value_field(
-            "rounds", "Max refinement rounds", kind="int", default=DEFAULT_TUNING_ROUNDS, min_value=1, max_value=8
+            "rounds",
+            "Max refinement rounds",
+            kind="int",
+            default=DEFAULT_TUNING_ROUNDS,
+            min_value=1,
+            max_value=MAX_TUNING_ROUNDS,
         ),
         value_field("v_step", "Speed step target", unit="m/s", default=default_speed_step),
         value_field("r_step", "Yaw-rate step target", unit="deg/s", default=default_yaw_rate_step),
         param_field("ATC_SPEED_P", "Speed P"),
         param_field("ATC_SPEED_I", "Speed I"),
+        param_field("ATC_STR_RAT_FF", "Steering rate FF"),
         param_field("ATC_STR_RAT_P", "Steering rate P"),
         param_field("ATC_STR_RAT_I", "Steering rate I"),
     ],

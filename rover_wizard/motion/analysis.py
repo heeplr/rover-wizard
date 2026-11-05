@@ -1,7 +1,7 @@
 """rover_wizard.motion.analysis - turns recorded drive-test samples into vehicle characteristics and tuning suggestions.
 
 Pure functions only: no vehicle access, no UI, no clock. Inputs are lists of DriveSample (see vehicle/link.py); outputs
-are small result dataclasses. Thresholds are named module constants, so their meaning is documented in one place.
+are small result dataclasses (closed-loop tuning from step responses is in step_tuning). Thresholds are named module constants, so their meaning is documented in one place.
 """
 
 from __future__ import annotations
@@ -51,25 +51,6 @@ FEEDFORWARD_MIN_YAW_RATE = math.radians(10)
 FEEDFORWARD_MIN_STEERING = 0.1
 # smaller throttle inputs are ignored for the speed feed-forward
 FEEDFORWARD_MIN_THROTTLE = 0.2
-# PI tuning rules (first match wins): thresholds on the step response, and (P, I) multipliers to apply.
-# overshoot above 20 %: far too aggressive
-LARGE_OVERSHOOT = 0.20
-# overshoot of 10..20 %: slightly too aggressive
-SMALL_OVERSHOOT = 0.10
-# steady-state error above 10 %: integrator too weak
-LARGE_STEADY_ERROR = 0.10
-# steady-state error of 5..10 %: integrator a little weak
-SMALL_STEADY_ERROR = 0.05
-# lower P and I clearly
-LARGE_OVERSHOOT_FACTORS = (0.75, 0.6)
-# lower P and I slightly
-SMALL_OVERSHOOT_FACTORS = (0.85, 0.8)
-# more proportional action
-SLOW_RESPONSE_FACTORS = (1.3, 1.0)
-# more integral action (and a little P to help)
-LARGE_ERROR_FACTORS = (1.1, 1.5)
-# a little more integral action
-SMALL_ERROR_FACTORS = (1.0, 1.25)
 # [s] window for measuring how fast the turn rate builds up
 STEER_ACCEL_WINDOW = 0.4
 # only look this long after the turn started
@@ -80,14 +61,6 @@ STEADY_WINDOW = 1.0
 STEADY_YAW_RATE_SLOPE = 0.6
 # [m/s^2] speed changing slower than this counts as steady
 STEADY_SPEED_SLOPE = 0.3
-# fewer samples inside a step than this -> no metrics
-STEP_MIN_SAMPLES = 8
-# "t63": time to reach 63 % of the target (one time constant)
-STEP_RISE_FRACTION = 0.63
-# steady-state value = mean over the last ≤ 1.5 s of the step ...
-STEP_TAIL_MAX_SECONDS = 1.5
-# ... or the last 30 % of the step, whichever is shorter
-STEP_TAIL_FRACTION = 0.3
 
 
 # --------------------------------------------------------------------------- result types
@@ -138,30 +111,6 @@ class SpeedFeedforwardResult:
     # [throttle per m/s]
     throttle_per_speed: Optional[float]
     sample_count: int
-
-
-@dataclass(frozen=True)
-class StepResponse:
-    """How a controlled quantity followed a step change of its target."""
-
-    # fraction by which the peak exceeded the target (0 = none)
-    overshoot: float
-    # fraction of the target still missing at the end of the step
-    steady_state_error: float
-    # [s] time to reach 63 % of the target (None = never)
-    rise_time_63: Optional[float]
-    # mean value over the end of the step
-    final_value: float
-
-
-@dataclass(frozen=True)
-class PiSuggestion:
-    """Next P/I gains to try, why, and whether tuning is finished."""
-
-    p_gain: float
-    i_gain: float
-    reason: str
-    converged: bool
 
 
 # --------------------------------------------------------------------------- signal helpers
@@ -370,73 +319,3 @@ def analyze_speed_feedforward(
         throttle_per_speed=throttle_sum / speed_sum,
         sample_count=count,
     )
-
-
-# --------------------------------------------------------------------------- closed-loop tuning
-def step_response_metrics(
-    times: list, values: list, target: float, step_on: float, step_off: float
-) -> Optional[StepResponse]:
-    """Overshoot, steady-state error and rise time of `values` following a step to `target` between the two times."""
-    # Mirror negative steps so the maths below only has to handle a positive target.
-    direction = 1 if target > 0 else -1
-    segment = [(time, value * direction) for time, value in zip(times, values) if step_on <= time <= step_off]
-    target_size = abs(target)
-    if len(segment) < STEP_MIN_SAMPLES or target_size == 0:
-        return None
-
-    # Overshoot = how far the peak went past the target, as a fraction of the target (never negative).
-    peak = max(value for _, value in segment)
-    overshoot = max(0.0, (peak - target_size) / target_size)
-    # Final value = mean over the end of the step (last 1.5 s or last 30 %, whichever is shorter).
-    tail_start = step_off - min(STEP_TAIL_MAX_SECONDS, STEP_TAIL_FRACTION * (step_off - step_on))
-    tail = [value for time, value in segment if time >= tail_start]
-    if not tail:
-        # the run ended (e.g. at the distance limit) before the end of the step: no steady state to judge
-        return None
-
-    final_value = sum(tail) / len(tail)
-    # Steady-state error = fraction of the target still missing at the end (negative = settled above target).
-    steady_state_error = (target_size - final_value) / target_size
-    # Rise time = seconds until the value first reached 63 % of the target (one first-order time constant).
-    rise_time = next((time - step_on for time, value in segment if value >= STEP_RISE_FRACTION * target_size), None)
-
-    return StepResponse(
-        overshoot=overshoot, steady_state_error=steady_state_error, rise_time_63=rise_time, final_value=final_value
-    )
-
-
-def suggest_pi_gains(
-    response: Optional[StepResponse], p_gain: float, i_gain: float, slow_rise_time: float
-) -> PiSuggestion:
-    """Heuristic next P/I gains from a step response, checked in order of severity.
-
-    Rules (first match wins): large overshoot -> lower P and I clearly; small overshoot -> lower slightly;
-    too slow -> raise P; large steady-state error -> raise I (and a little P); small error -> raise I slightly;
-    otherwise the controller is tracking well and tuning has converged.
-    """
-    if response is None:
-        return PiSuggestion(p_gain, i_gain, "no usable data", False)
-
-    def scaled(factors, reason):
-        """The current gains times the rule's (P, I) multipliers."""
-        p_factor, i_factor = factors
-        # New gains = current gains times the rule's multipliers.
-        return PiSuggestion(p_gain * p_factor, i_gain * i_factor, reason, False)
-
-    if response.overshoot > LARGE_OVERSHOOT:
-        return scaled(LARGE_OVERSHOOT_FACTORS, f"overshoot {response.overshoot:.0%} -> lower P and I")
-
-    if response.overshoot > SMALL_OVERSHOOT:
-        return scaled(SMALL_OVERSHOOT_FACTORS, f"overshoot {response.overshoot:.0%} -> slightly lower P and I")
-
-    # Never reached 63 % of the target, or too late: not enough proportional action.
-    if response.rise_time_63 is None or response.rise_time_63 > slow_rise_time:
-        return scaled(SLOW_RESPONSE_FACTORS, "response too slow -> raise P")
-
-    if abs(response.steady_state_error) > LARGE_STEADY_ERROR:
-        return scaled(LARGE_ERROR_FACTORS, f"steady-state error {response.steady_state_error:.0%} -> raise I")
-
-    if abs(response.steady_state_error) > SMALL_STEADY_ERROR:
-        return scaled(SMALL_ERROR_FACTORS, f"steady-state error {response.steady_state_error:.0%} -> slightly raise I")
-
-    return PiSuggestion(p_gain, i_gain, "tracking is good", True)

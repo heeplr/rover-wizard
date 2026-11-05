@@ -14,6 +14,7 @@ import random
 import threading
 import time
 from types import SimpleNamespace
+from typing import Optional
 
 from ..util import timebase
 from ..util.errors import VehicleError
@@ -22,6 +23,9 @@ from ..rover_defs import (
     ARMING_SKIPCHK_ALL,
     AUX_FUNCTION_REFRESH_SECONDS,
     COMPASS_MOTCT_CURRENT,
+    GCS_PID_MASK_STEERING,
+    GCS_PID_MASK_THROTTLE,
+    GRAVITY,
     FS_ACTION_NOTHING,
     FS_OPTIONS_ACTIVE_IN_HOLD,
     MODES,
@@ -54,6 +58,8 @@ from ..rover_defs import (
     DEVID_BUS_BITS,
     DEVID_BUS_TYPE_BITS,
     DEVID_BYTE_BITS,
+    STEER_SPEED_MIN,
+    TURN_MAX_G_MIN,
 )
 from ..mavlink_defs import (
     ACCELCAL_VEHICLE_POS_BACK,
@@ -105,6 +111,7 @@ from .link import (
     INBOX_MAG_CAL_REPORT,
     MODE_CHANGE_TIMEOUT,
     PRESSURE_MESSAGES,
+    PidSample,
     Vehicle,
 )
 
@@ -331,6 +338,13 @@ class SimVehicle(Vehicle):
         self._override_time = 0.0
         self._guided_target = (0.0, 0.0)
         self._guided_integral = [0.0, 0.0]
+        # the steering controller's turn-rate target after its acceleration limit [rad/s] (AR_AttitudeControl)
+        self._desired_turn_rate = 0.0
+        # what the Guided controllers last reported (PID_TUNING), None while they don't run
+        self._steering_pid: Optional[PidSample] = None
+        self._speed_pid: Optional[PidSample] = None
+        # [rad/s] standard deviation of the measured turn rate's noise (a gyro on a bumpy vehicle: more)
+        self.yaw_rate_noise = YAW_RATE_NOISE
         self._running = False
         self._build_params()
 
@@ -437,6 +451,7 @@ class SimVehicle(Vehicle):
             ATC_SPEED_P=0.2,
             ATC_SPEED_I=0.2,
             ATC_SPEED_D=0,
+            GCS_PID_MASK=0,
             WP_SPEED=2,
             WP_RADIUS=2,
             WP_OVERSHOOT=2,
@@ -935,11 +950,13 @@ class SimVehicle(Vehicle):
         return DriveSample(
             time=timebase.now(),
             forward_speed=self.speed + random.gauss(0, SPEED_NOISE),
-            yaw_rate=self.yaw_rate + random.gauss(0, YAW_RATE_NOISE),
+            yaw_rate=self.yaw_rate + random.gauss(0, self.yaw_rate_noise),
             steering_input=steering,
             throttle_input=throttle,
             north=self.north,
             east=self.east,
+            steering_pid=self._steering_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_STEERING else None,
+            speed_pid=self._speed_pid if self.get_int("GCS_PID_MASK") & GCS_PID_MASK_THROTTLE else None,
         )
 
     # ------------------------------------------------------------------ physics
@@ -964,6 +981,10 @@ class SimVehicle(Vehicle):
 
     def _commanded_sticks(self, step: float) -> tuple:
         """(steering, throttle) -1..1 the autopilot outputs this step: sticks, or the Guided-mode controllers."""
+        if self.custom_mode != MODES["GUIDED"] or not self.armed:
+            # the Guided controllers don't run: they report nothing and start afresh next time
+            self._steering_pid = self._speed_pid = None
+            self._desired_turn_rate = self.yaw_rate
         if not self.armed or self.custom_mode == MODES["HOLD"]:
             # a stopped controller forgets its integrators
             self._guided_integral = [0.0, 0.0]
@@ -979,22 +1000,43 @@ class SimVehicle(Vehicle):
         cruise_throttle = self.get("CRUISE_THROTTLE") / 100.0
         throttle_per_speed = cruise_throttle / cruise_speed if cruise_speed > 0 else 1 / self.TOP_SPEED
         speed_error = target_speed - self.speed
-        yaw_error = target_yaw_rate - self.yaw_rate
-        # Integrators: accumulate I-gain x error x time, clamped to +-1 (anti-windup).
-        self._guided_integral[0] = max(
-            -1, min(1, self._guided_integral[0] + self.get("ATC_SPEED_I") * speed_error * step)
-        )
-        self._guided_integral[1] = max(
-            -1, min(1, self._guided_integral[1] + self.get("ATC_STR_RAT_I") * yaw_error * step)
-        )
+        desired_rate = self._limited_turn_rate(target_yaw_rate, step)
+        yaw_error = desired_rate - self.yaw_rate
         # Output = feed-forward x target + P x error + integrator (the structure of ArduPilot's controllers).
-        throttle = throttle_per_speed * target_speed + self.get("ATC_SPEED_P") * speed_error + self._guided_integral[0]
-        steering = (
-            self.get("ATC_STR_RAT_FF") * target_yaw_rate
-            + self.get("ATC_STR_RAT_P") * yaw_error
-            + self._guided_integral[1]
-        )
+        speed_parts = (throttle_per_speed * target_speed, self.get("ATC_SPEED_P") * speed_error)
+        steering_parts = (self.get("ATC_STR_RAT_FF") * desired_rate, self.get("ATC_STR_RAT_P") * yaw_error)
+        # Integrators: accumulate I-gain x error x time, clamped to +-1 (anti-windup). Like AC_PID::update_i, while
+        # the output is at its limit (AP_MotorsUGV's limit flags) an integrator may only shrink.
+        for index, gain, error, parts in (
+            (0, "ATC_SPEED_I", speed_error, speed_parts),
+            (1, "ATC_STR_RAT_I", yaw_error, steering_parts),
+        ):
+            integral = self._guided_integral[index]
+            limited = abs(sum(parts) + integral) >= 1
+            if not limited or integral * error < 0:
+                self._guided_integral[index] = max(-1, min(1, integral + self.get(gain) * error * step))
+        throttle = sum(speed_parts) + self._guided_integral[0]
+        steering = sum(steering_parts) + self._guided_integral[1]
+        self._speed_pid = PidSample(target_speed, self.speed, *speed_parts, self._guided_integral[0], 0.0)
+        self._steering_pid = PidSample(desired_rate, self.yaw_rate, *steering_parts, self._guided_integral[1], 0.0)
         return max(-1, min(1, steering)), max(-1, min(1, throttle))
+
+    def _limited_turn_rate(self, target: float, step: float) -> float:
+        """Like AR_AttitudeControl::get_steering_out_rate: the turn-rate target after ATC_STR_ACC_MAX, ATC_STR_RAT_MAX
+        and the lateral-acceleration limit ATC_TURN_MAX_G (at a speed of at least 1 m/s)."""
+        accel_max = math.radians(self.get("ATC_STR_ACC_MAX"))
+        if accel_max > 0:
+            change = accel_max * step
+            target = max(self._desired_turn_rate - change, min(self._desired_turn_rate + change, target))
+        self._desired_turn_rate = target
+        rate_max = math.radians(self.get("ATC_STR_RAT_MAX"))
+        if rate_max > 0:
+            target = max(-rate_max, min(rate_max, target))
+        lateral_max = max(self.get("ATC_TURN_MAX_G"), TURN_MAX_G_MIN) * GRAVITY
+        turn_rate_max = max(lateral_max / max(abs(self.speed), STEER_SPEED_MIN), math.radians(1))
+        target = max(-turn_rate_max, min(turn_rate_max, target))
+        self._desired_turn_rate = target
+        return target
 
     def _physics_step(self, step: float) -> None:
         """Advance the vehicle by `step` seconds: outputs -> motor effort -> target speeds -> lagged speeds -> position."""

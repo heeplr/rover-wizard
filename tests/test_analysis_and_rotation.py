@@ -5,9 +5,6 @@ import math
 import pytest
 
 from rover_wizard.motion.analysis import analyze_top_speed_run
-from rover_wizard.motion.analysis import StepResponse
-from rover_wizard.motion.analysis import step_response_metrics
-from rover_wizard.motion.analysis import suggest_pi_gains
 from rover_wizard.util.rotation import ORIENTATION_CHOICES
 from rover_wizard.util.rotation import best_matching_rotation
 from rover_wizard.util.rotation import gravity_direction_from_accelerometer
@@ -20,7 +17,7 @@ from util.helpers import check
 
 
 def test_analysis():
-    """Check the measurement maths (top-speed detection, step-response metrics, P/I suggestions) against known inputs."""
+    """Check the top-speed detection against a known first-order approach to 3 m/s."""
     samples = []
     speed = 0.0
     for index in range(400):
@@ -38,16 +35,6 @@ def test_analysis():
         )
     result = analyze_top_speed_run(samples)
     check("top speed ~3", result and abs(result.top_speed - 3.0) < 0.1, result and f"{result.top_speed:.2f}")
-    response = step_response_metrics(
-        [i * 0.1 for i in range(100)], [min(2.0, i * 0.1 * 2) * 1.2 for i in range(100)], 2.0, 0.0, 9.9
-    )
-    check("step metrics overshoot detected", response and response.overshoot > 0.1)
-    suggestion = suggest_pi_gains(response, 1.0, 1.0, 3.0)
-    check(
-        "PI suggestion lowers gains on overshoot",
-        suggestion.p_gain < 1.0 and suggestion.i_gain < 1.0,
-        suggestion.reason,
-    )
 
 
 def test_rotation_maths():
@@ -105,36 +92,3 @@ def test_top_speed_run_without_full_throttle():
 
     samples = [DriveSample(time=t / 10, forward_speed=min(1.0, t / 20), throttle_input=0.3) for t in range(60)]
     assert analyze_top_speed_run(samples).speed_was_steady is False
-
-
-def test_step_cut_short_before_its_end_gives_no_metrics():
-    # the run stopped (distance limit) before the last part of the step: no steady state to judge
-    times = [t / 10 for t in range(30)]
-    assert step_response_metrics(times, [1.0] * 30, target=1.0, step_on=0.0, step_off=10.0) is None
-
-
-@pytest.mark.parametrize(
-    "overshoot, rise_time, error, factors, converged",
-    [
-        (0.3, 1.0, 0.0, (0.75, 0.6), False),
-        (0.15, 1.0, 0.0, (0.85, 0.8), False),
-        # never reached 63 % of the target
-        (0.0, None, 0.5, (1.3, 1.0), False),
-        (0.0, 5.0, 0.0, (1.3, 1.0), False),
-        (0.0, 1.0, 0.2, (1.1, 1.5), False),
-        # settled above the target counts as well
-        (0.0, 1.0, -0.07, (1.0, 1.25), False),
-        (0.05, 1.0, 0.02, (1.0, 1.0), True),
-    ],
-    ids=["large overshoot", "small overshoot", "never rises", "slow", "large error", "small error", "good"],
-)
-def test_pi_suggestion_rules(overshoot, rise_time, error, factors, converged):
-    response = StepResponse(overshoot=overshoot, steady_state_error=error, rise_time_63=rise_time, final_value=1.0)
-    suggestion = suggest_pi_gains(response, 0.2, 0.1, slow_rise_time=3.0)
-    assert (suggestion.p_gain, suggestion.i_gain) == pytest.approx((0.2 * factors[0], 0.1 * factors[1]))
-    assert suggestion.converged is converged
-
-
-def test_no_step_response_keeps_the_gains():
-    suggestion = suggest_pi_gains(None, 0.2, 0.1, slow_rise_time=3.0)
-    assert (suggestion.p_gain, suggestion.i_gain, suggestion.converged) == (0.2, 0.1, False)

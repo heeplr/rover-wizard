@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from rover_wizard.vehicle.link import Vehicle
+from rover_wizard.mavlink_defs import PID_TUNING_ACCZ, PID_TUNING_STEER
+from rover_wizard.vehicle.link import Vehicle, pid_tuning_key
 
 # the vehicle heads east (yaw = 90 degrees)
 EAST = math.pi / 2
@@ -84,3 +85,19 @@ def test_last_text_finds_the_newest_matching_message():
         vehicle._add_status_text(text)
     assert vehicle.last_text("PreArm") == "FC says: PreArm: Compass not calibrated"
     assert vehicle.last_text("EKF") == ""
+
+
+def test_controller_reports_become_part_of_the_drive_samples():
+    # Rover's PID_TUNING: the steering controller in deg/s, the speed controller in m/s (GCS_MAVLINK_Rover)
+    vehicle = vehicle_with(ATTITUDE={"yaw": EAST, "pitch": 0.0, "yawspeed": 0.3})
+    steering = {"desired": 30.0, "achieved": 27.0, "FF": 0.4, "P": 0.05, "I": 0.1, "D": 0.0}
+    speed = {"desired": 1.2, "achieved": 1.1, "FF": 0.3, "P": 0.02, "I": 0.01, "D": 0.0}
+    vehicle._store_message(pid_tuning_key(PID_TUNING_STEER), SimpleNamespace(axis=PID_TUNING_STEER, **steering))
+    vehicle._store_message(pid_tuning_key(PID_TUNING_ACCZ), SimpleNamespace(axis=PID_TUNING_ACCZ, **speed))
+    sample = vehicle.sample()
+    assert sample.steering_pid.desired == pytest.approx(math.radians(30))
+    assert sample.steering_pid.achieved == pytest.approx(math.radians(27))
+    assert sample.steering_pid.output == pytest.approx(0.55)
+    assert (sample.speed_pid.desired, sample.speed_pid.output) == pytest.approx((1.2, 0.33))
+    # without reports
+    assert vehicle_with(ATTITUDE={"yaw": EAST, "pitch": 0.0, "yawspeed": 0.3}).sample().steering_pid is None

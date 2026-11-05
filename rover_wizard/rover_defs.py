@@ -28,6 +28,18 @@ MODES = {
 MODE_NAMES = {v: k for k, v in MODES.items()}
 
 
+# ---- Controller reports (GCS_PID_MASK bits: send PID_TUNING for that controller) ----------------------------------
+GCS_PID_MASK_STEERING = 1
+GCS_PID_MASK_THROTTLE = 2
+
+# ---- Steering control (AR_AttitudeControl) ------------------------------------------------------------------------
+# the turn rate is limited to ATC_TURN_MAX_G (at least this many g) / speed (at least STEER_SPEED_MIN m/s)
+TURN_MAX_G_MIN = 0.1
+STEER_SPEED_MIN = 1.0
+# [m/s^2] GRAVITY_MSS
+GRAVITY = 9.80665
+
+
 # ---- Servo outputs (SERVOx_FUNCTION) -------------------------------------------------------------------------------
 # ArduPilot SERVOx_FUNCTION values (the parameter's own enum, not MAVLink) for the outputs a Rover uses.
 SERVO_FUNCTION_GROUND_STEERING = 26

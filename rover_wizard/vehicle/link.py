@@ -49,6 +49,7 @@ from ..mavlink_defs import (
     MAVLINK_MSG_ID_RPM,
     MAVLINK_MSG_ID_SCALED_IMU,
     MAVLINK_MSG_ID_SERVO_OUTPUT_RAW,
+    MAVLINK_MSG_ID_PID_TUNING,
     MAVLINK_MSG_ID_SYS_STATUS,
     MAVLINK_MSG_ID_VFR_HUD,
     MAVLINK_MSG_ID_WHEEL_DISTANCE,
@@ -86,6 +87,8 @@ from ..mavlink_defs import (
     MOTOR_TEST_ORDER_DEFAULT,
     MOTOR_TEST_THROTTLE_PERCENT,
     PARAM_INDEX_UNKNOWN,
+    PID_TUNING_ACCZ,
+    PID_TUNING_STEER,
     RC_CHANNELS_MAX,
     UINT16_MAX,
     SCALED_PRESSURE_CENTIDEGREES_PER_DEGREE,
@@ -172,6 +175,8 @@ ARDUPILOT_DEFAULT_RCMAP = (1, 3)
 
 # [s] between RELAY_STATUS reports: relays rarely change, and a click asks for the new state at once
 RELAY_STATUS_PERIOD_SECONDS = 3.0
+# [Hz] the controllers' PID_TUNING while controller_reports() asks for them (drive samples come at 10-20 Hz)
+PID_TUNING_RATE_HZ = 20
 # Every telemetry group (REQUEST_DATA_STREAM, all streams) at this rate - for what STREAMS doesn't name, e.g. the
 # compass calibration's MAG_CAL_PROGRESS/REPORT. Kept low: on a telemetry radio (57600 baud, half-duplex) all groups at
 # 10 Hz fill the link, and the wizard's commands and the parameter download get through late. STREAMS (sent after
@@ -222,6 +227,25 @@ STATUSTEXT_PIECE_LENGTH = 50
 STATUSTEXT_PIECES_WAIT_SECONDS = 1.0
 
 
+@dataclass(frozen=True)
+class PidSample:
+    """One PID_TUNING report of a controller, in the units of the quantity it controls (turn rate in rad/s, speed in
+    m/s); ff/p/i/d are the parts of its output (-1..1, e.g. full steering lock = 1)."""
+
+    # what the controller aims for after ArduPilot's own limits, and what it measured
+    desired: float
+    achieved: float
+    ff: float
+    p: float
+    i: float
+    d: float
+
+    @property
+    def output(self) -> float:
+        """The controller's output: the sum of its parts."""
+        return self.ff + self.p + self.i + self.d
+
+
 @dataclass
 class DriveSample:
     """What the vehicle was doing at one moment of a drive test."""
@@ -244,6 +268,9 @@ class DriveSample:
     run_time: float = 0.0
     # what the wizard commanded at this moment (open-loop or guided)
     command: Optional[tuple] = None
+    # the steering-rate and speed controllers' reports (only while their PID_TUNING is switched on)
+    steering_pid: Optional[PidSample] = None
+    speed_pid: Optional[PidSample] = None
 
     def is_usable(self) -> bool:
         """Whether this sample has the speed and turn rate every analysis needs."""
@@ -589,6 +616,9 @@ class Vehicle:
             self._push_inbox(msg_type, message)
         elif msg_type == "DISTANCE_SENSOR":
             self._store_distance_sensor(message, timestamp)
+        elif msg_type == "PID_TUNING":
+            # one per controller (latest(pid_tuning_key(axis)))
+            self._store_message(pid_tuning_key(message.axis), message, timestamp)
         elif msg_type == "NAMED_VALUE_FLOAT":
             # one per name, so each value can be read on its own (latest(named_value_key(name)))
             self._store_message(named_value_key(_mavlink_text(message.name)), message, timestamp)
@@ -898,10 +928,31 @@ class Vehicle:
             )
         )
         for message_id, rate_hz in STREAMS:
-            # SET_MESSAGE_INTERVAL wants microseconds between messages
-            interval_us = int(1e6 / rate_hz)
-            self.command_long(MAV_CMD_SET_MESSAGE_INTERVAL, message_id, interval_us, wait=False)
+            self.set_message_rate(message_id, rate_hz)
             timebase.sleep(STREAM_REQUEST_SPACING)
+
+    def set_message_rate(self, message_id: int, rate_hz: float) -> None:
+        """Ask for one telemetry message at its own rate; 0 = the firmware's default rate again."""
+        # SET_MESSAGE_INTERVAL wants microseconds between messages (0: default rate)
+        interval_us = int(1e6 / rate_hz) if rate_hz > 0 else 0
+        self.command_long(MAV_CMD_SET_MESSAGE_INTERVAL, message_id, interval_us, wait=False)
+
+    @contextlib.contextmanager
+    def controller_reports(self, mask: int):
+        """While inside: the controllers in `mask` (GCS_PID_MASK bits) send PID_TUNING at PID_TUNING_RATE_HZ, so
+        drive samples carry them. Yields whether that is possible (False without GCS_PID_MASK); the previous
+        GCS_PID_MASK and the default rate are restored afterwards."""
+        if not self.has_parameter("GCS_PID_MASK"):
+            yield False
+            return
+        original = self.get_int("GCS_PID_MASK")
+        self.set_param("GCS_PID_MASK", original | mask)
+        self.set_message_rate(MAVLINK_MSG_ID_PID_TUNING, PID_TUNING_RATE_HZ)
+        try:
+            yield True
+        finally:
+            self.set_param("GCS_PID_MASK", original)
+            self.set_message_rate(MAVLINK_MSG_ID_PID_TUNING, 0)
 
     def read_version(self) -> None:
         """Firmware version from AUTOPILOT_VERSION (fallback: the version banner in STATUSTEXT)."""
@@ -1159,6 +1210,13 @@ class Vehicle:
         return position(steering_channel), position(throttle_channel)
 
     # ================================================================== drive samples
+    def _pid_sample(self, axis: int, unit=float) -> Optional[PidSample]:
+        """The latest fresh PID_TUNING of a controller (desired/achieved converted with `unit`), or None."""
+        report = self.latest(pid_tuning_key(axis), max_age=TELEMETRY_FRESH_SECONDS)
+        if report is None:
+            return None
+        return PidSample(unit(report.desired), unit(report.achieved), report.FF, report.P, report.I, report.D)
+
     def sample(self) -> DriveSample:
         """One snapshot of speed, turn rate, pilot inputs and position for the drive-test analyses."""
         steering, throttle = self.rc_inputs()
@@ -1166,6 +1224,8 @@ class Vehicle:
         attitude = self.latest("ATTITUDE", max_age=TELEMETRY_FRESH_SECONDS)
         position = self.latest("LOCAL_POSITION_NED", max_age=TELEMETRY_FRESH_SECONDS)
         hud = self.latest("VFR_HUD", max_age=TELEMETRY_FRESH_SECONDS)
+        sample.steering_pid = self._pid_sample(PID_TUNING_STEER, math.radians)
+        sample.speed_pid = self._pid_sample(PID_TUNING_ACCZ)
         if attitude is not None:
             sample.yaw_rate = attitude.yawspeed
             if position is not None:
@@ -1181,6 +1241,11 @@ class Vehicle:
             sample.forward_speed = -hud.groundspeed if reversing else hud.groundspeed
 
         return sample
+
+
+def pid_tuning_key(axis: int) -> str:
+    """The latest() key of the PID_TUNING of one controller (PID_TUNING_STEER, ...)."""
+    return f"PID_TUNING:{axis}"
 
 
 def named_value_key(name: str) -> str:

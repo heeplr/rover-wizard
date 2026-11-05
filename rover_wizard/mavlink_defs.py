@@ -117,9 +117,15 @@ MAVLINK_MSG_ID_GPS2_RAW = 124
 MAVLINK_MSG_ID_RPM = 226
 # which relays are set up (present) and switched on, one bit per relay (bit 0 = relay 1); firmware 4.5+
 MAVLINK_MSG_ID_RELAY_STATUS = 376
+# ArduPilot-specific, ardupilotmega.xml: what a controller aims for and achieves, and its FF/P/I/D parts
+MAVLINK_MSG_ID_PID_TUNING = 194
 
 
 # ---- Enumerations in messages --------------------------------------------------------------------------------------
+# PID_TUNING.axis as Rover sends it (GCS_MAVLINK_Rover::send_pid_tuning): the steering-rate controller (turn rates
+# in deg/s) and the speed-to-throttle controller (speeds in m/s)
+PID_TUNING_STEER = 5
+PID_TUNING_ACCZ = 4
 # HEARTBEAT.autopilot: this is ArduPilot firmware
 MAV_AUTOPILOT_ARDUPILOTMEGA = 3
 # HEARTBEAT.type: wheeled rover

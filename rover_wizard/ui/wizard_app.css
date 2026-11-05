@@ -86,7 +86,7 @@ Screen.-compact .frow Input { width: 14; }
 Screen.-compact .frow Select { width: 26; }
 Screen.-compact Button.inline-act { min-width: 5; }
 Screen.-compact #nav Button { width: 1fr; min-width: 8; margin-right: 0; }
-Screen.-compact #ctl { layout: grid; grid-size: 3; grid-gutter: 0 1; height: 6; }
+Screen.-compact #ctl { layout: grid; grid-size: 4; grid-gutter: 0 1; height: 6; }
 Screen.-compact #ctl Button { width: 1fr; margin-right: 0; }
 /* no blank line above the side-panel titles: more rows for the step list on short terminals */
 Screen.-compact .panel-title { margin-top: 0; }
