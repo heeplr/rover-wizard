@@ -13,7 +13,9 @@ What makes it robust against real data:
 * While the output is at its limit (full steering lock, full throttle) the target can't be reached at all: the
   gains are left alone.
 * A steady-state error is corrected through FF where it can be (the output the vehicle needed, per unit achieved):
-  ArduPilot's rate controllers rely on FF for it, I only builds up slowly within a short step.
+  ArduPilot's rate controllers rely on FF for it, I only builds up slowly within a short step. That measurement
+  depends on the vehicle only, not on the gains, so every round near the target measures the same value - and FF is
+  set to their average: a single round's noise doesn't make it swing.
 * When measurement noise makes the controller's output jitter, an error filter (FLTE) well above the loop's
   bandwidth is proposed (suggest_error_filter).
 * A gain whose change reverses the previous round's direction changes only half as much (in proportion) as before,
@@ -269,6 +271,8 @@ class GainTuner:
         # gain -> direction of its last change (+1 up, -1 down) and how often its direction reversed
         self._last_direction: dict = {}
         self._reversals: dict = {}
+        # what FF should be, as measured by each round near the target (the FF correction uses their average)
+        self._ff_estimates: list = []
 
     def next_gains(self, response: Optional[StepResponse]) -> GainChange:
         """The gains for the next round (also kept as self.gains)."""
@@ -282,6 +286,7 @@ class GainTuner:
                 blocked=True,
             )
 
+        self._note_ff_estimate(response)
         if response.overshoot > LARGE_OVERSHOOT:
             return self._scale(LARGE_OVERSHOOT_FACTORS, f"overshoot {response.overshoot:.0%} -> lower P and I")
         if response.overshoot > SMALL_OVERSHOOT:
@@ -304,15 +309,26 @@ class GainTuner:
 
         return GainChange(dict(self.gains), "tracking is good", converged=True)
 
+    def _note_ff_estimate(self, response: StepResponse) -> None:
+        """Keep the FF this round measured (the output per unit achieved) - if it got near the target: far from it,
+        the vehicle turns (or drives) at another operating point, which needn't take the same FF."""
+        near = abs(response.measured_error) <= LARGE_STEADY_ERROR
+        if "ff" in self.gains and response.output is not None and response.final_value > 0 and near:
+            self._ff_estimates.append(response.output / response.final_value)
+
     def _correct_ff(self, response: StepResponse) -> GainChange:
-        """FF = the output the vehicle needed per unit it achieved, so FF alone delivers it next time."""
+        """FF = the output the vehicle needed per unit it achieved, so FF alone delivers it next time - averaged
+        over the rounds near the target once there are any (each round's measurement is noisy)."""
         old = self.gains["ff"]
-        needed = response.output / response.final_value
+        needed, measured = response.output / response.final_value, "the output the turn needed"
+        if self._ff_estimates and abs(response.measured_error) <= LARGE_STEADY_ERROR:
+            needed = sum(self._ff_estimates) / len(self._ff_estimates)
+            if len(self._ff_estimates) > 1:
+                measured += f", average of {len(self._ff_estimates)} rounds"
         new = max(old / FF_MAX_FACTOR, min(old * FF_MAX_FACTOR, needed)) if old > 0 else needed
         return self._apply(
             {"ff": new / old if old > 0 else 1.0},
-            f"steady-state error {response.measured_error:.0%} -> FF {old:.3g} -> {new:.3g} "
-            "(the output the turn needed)",
+            f"steady-state error {response.measured_error:.0%} -> FF {old:.3g} -> {new:.3g} ({measured})",
             absolute={"ff": new} if old <= 0 else None,
         )
 
