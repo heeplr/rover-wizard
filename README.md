@@ -15,12 +15,13 @@ Click "❓" next to any step or field for help.
 * autoprobes various settings (e.g. MOT_THR_MIN, GPSx_TYPE, ATC_SPEED_MAX, TURN_RADIUS, PID parameters etc.)
 * realtime monitor for RC-Channels, Servo outputs, Accel, Gyro, relay states
 * adjust arbitrary servo's PWM to verify connections
-* set/get parameters from commandline with wildcard support (e.g. `rover-wizard --param ATC_SPEED_*`)
 * parameter view to list/edit all parameters
 * extensive documentation built into app
 * works with current vehicle settings or after factory reset
 * backup/restore current FC parameter config
 * show/undo parameter changes
+* set/get parameters from commandline with wildcard support (e.g. `rover-wizard --param ATC_SPEED_*`)
+* download/delete logs from commandline
 
 
 ## Install
@@ -42,7 +43,7 @@ pip install .
 ## Run
 ```sh
 rover-wizard --help
-usage: rover_wizard [-h] [--version] [--conn CONN] [--baud BAUD] [--demo] [--demo-skid] [--demo-boat] [--demo-sailboat] [-p NAME[=VALUE]]
+usage: rover_wizard [-h] [--version] [--conn CONN] [--baud BAUD] [--demo] [--demo-skid] [--demo-boat] [--demo-sailboat] [-p NAME[=VALUE]] [--logs] [--get-log NUMBERS] [--delete-all-logs]
 
 ArduPilot Rover setup & tuning wizard (Textual UI)
 
@@ -57,6 +58,12 @@ options:
   --demo-sailboat       use a simulated sailing boat with a motor
   -p, --param NAME[=VALUE]
                         print a parameter (NAME, or a pattern like 'SERVO1_*') or write it (NAME=VALUE), then exit without the UI; repeatable, handled in order
+
+onboard logs (logs are numbered as the vehicle lists them, 1 = the oldest):
+  --logs                list the logs on the vehicle, then exit without the UI
+  --get-log NUMBERS     download logs, e.g. 3, 3,5 or 7-9 (combinable: 3,7-9), into the 'logs' folder next to the progress files (the full path of each file is printed), then exit without
+                        the UI
+  --delete-all-logs     erase ALL logs on the vehicle after typing 'yes' (MAVLink can't erase single logs), then exit
 ```
 
 e.g.
