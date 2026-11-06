@@ -55,8 +55,8 @@
             </div>
         </aside>
         <h2>
-            <span class="text">11 statements &nbsp;</span>
-            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">11<span class="text"> run</span></button>
+            <span class="text">13 statements &nbsp;</span>
+            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">13<span class="text"> run</span></button>
             <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">0<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">0<span class="text"> excluded</span></button>
             <button type="button" class="par run show_par button_toggle_par" value="par" data-shortcut="p" title="Toggle lines partially run">0<span class="text"> partial</span></button>
@@ -67,7 +67,7 @@
             <a id="nextFileLink" class="nav" href="z_e09669e208498c16_link_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.0">coverage.py v7.17.0</a>,
-            created at 2026-11-03 14:38 +0000
+            created at 2026-11-06 17:09 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -100,14 +100,18 @@
     <p class="run"><span class="n"><a id="t16" href="#t16">16</a></span><span class="t">    <span class="key">if</span> <span class="nam">kind</span> <span class="op">==</span> <span class="str">&quot;boat&quot;</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t17" href="#t17">17</a></span><span class="t">        <span class="key">from</span> <span class="op">.</span><span class="nam">boat_simulator</span> <span class="key">import</span> <span class="nam">SimBoat</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t18" href="#t18">18</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t19" href="#t19">19</a></span><span class="t">        <span class="key">return</span> <span class="nam">SimBoat</span><span class="op">(</span><span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t20" href="#t20">20</a></span><span class="t">    <span class="key">if</span> <span class="nam">kind</span> <span class="op">==</span> <span class="str">&quot;sailboat&quot;</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t19" href="#t19">19</a></span><span class="t">        <span class="nam">vehicle</span> <span class="op">=</span> <span class="nam">SimBoat</span><span class="op">(</span><span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t20" href="#t20">20</a></span><span class="t">    <span class="key">elif</span> <span class="nam">kind</span> <span class="op">==</span> <span class="str">&quot;sailboat&quot;</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t21" href="#t21">21</a></span><span class="t">        <span class="key">from</span> <span class="op">.</span><span class="nam">sail_simulator</span> <span class="key">import</span> <span class="nam">SimSailboat</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t22" href="#t22">22</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t23" href="#t23">23</a></span><span class="t">        <span class="key">return</span> <span class="nam">SimSailboat</span><span class="op">(</span><span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t24" href="#t24">24</a></span><span class="t">    <span class="key">from</span> <span class="op">.</span><span class="nam">rover_simulator</span> <span class="key">import</span> <span class="nam">SimVehicle</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t25" href="#t25">25</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t26" href="#t26">26</a></span><span class="t">    <span class="key">return</span> <span class="nam">SimVehicle</span><span class="op">(</span><span class="nam">skid</span><span class="op">=</span><span class="nam">kind</span> <span class="op">==</span> <span class="str">&quot;skid&quot;</span><span class="op">,</span> <span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t23" href="#t23">23</a></span><span class="t">        <span class="nam">vehicle</span> <span class="op">=</span> <span class="nam">SimSailboat</span><span class="op">(</span><span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t24" href="#t24">24</a></span><span class="t">    <span class="key">else</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t25" href="#t25">25</a></span><span class="t">        <span class="key">from</span> <span class="op">.</span><span class="nam">rover_simulator</span> <span class="key">import</span> <span class="nam">SimVehicle</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t26" href="#t26">26</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t27" href="#t27">27</a></span><span class="t">        <span class="nam">vehicle</span> <span class="op">=</span> <span class="nam">SimVehicle</span><span class="op">(</span><span class="nam">skid</span><span class="op">=</span><span class="nam">kind</span> <span class="op">==</span> <span class="str">&quot;skid&quot;</span><span class="op">,</span> <span class="nam">wired_wrong</span><span class="op">=</span><span class="nam">wired_wrong</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t28" href="#t28">28</a></span><span class="t">    <span class="com"># a few logs on the &quot;SD card&quot; for trying --logs / --get-log</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t29" href="#t29">29</a></span><span class="t">    <span class="nam">vehicle</span><span class="op">.</span><span class="nam">onboard_logs</span><span class="op">.</span><span class="nam">add_demo_logs</span><span class="op">(</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t30" href="#t30">30</a></span><span class="t">    <span class="key">return</span> <span class="nam">vehicle</span>&nbsp;</span><span class="r"></span></p>
 </main>
 <footer>
     <div class="content">
@@ -117,7 +121,7 @@
             <a class="nav" href="z_e09669e208498c16_link_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.0">coverage.py v7.17.0</a>,
-            created at 2026-11-03 14:38 +0000
+            created at 2026-11-06 17:09 +0000
         </p>
     </div>
 </footer>
