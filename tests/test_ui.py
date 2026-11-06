@@ -338,6 +338,39 @@ async def steering_test_scenario():
         vehicle.disconnect()
 
 
+async def current_step_in_sidebar_scenario():
+    """The sidebar highlights the step being shown - also a skipped one - and scrolls it into view (a terminal
+    too small for the whole sidebar), whether Skip, Back or Next changed the step."""
+    app = WizardApp(demo="rover")
+    async with app.run_test(size=(100, 30)) as pilot:
+        screen, ctx, vehicle = await start(pilot, app)
+        sidebar = screen.query_one("#sidebar")
+        check("the sidebar doesn't fit", sidebar.virtual_size.height > sidebar.content_region.height)
+        wrong = []
+
+        def shown_right(how):
+            """Exactly the current entry is highlighted, and it is inside the visible part of the sidebar."""
+            current = screen.query_one(f"#nav-{screen.step_index}", Button)
+            box, region = sidebar.content_region, current.region
+            highlighted = [button.id for button in screen.query("Button.nav.current")]
+            if highlighted != [current.id] or not (region.height and box.y <= region.y < box.bottom):
+                wrong.append(f"{how} -> {STEPS[screen.step_index].id}: highlighted {highlighted}, at {region.y}")
+
+        for how in ["b-skip"] * 12 + ["b-back"] * 12:
+            await pilot.click(f"#{how}")
+            await pilot.pause(0.3)
+            shown_right(how)
+        # Next on a step with nothing to apply (the skipped steps behind it are revisited: their mark is ⏭)
+        await screen.show_step(INDEX["serial_ports"])
+        await pilot.pause(0.3)
+        await pilot.click("#b-next")
+        await until(pilot, lambda: screen.step_index != INDEX["serial_ports"])
+        await pilot.pause(0.3)
+        shown_right("b-next")
+        check("the current step is highlighted and visible after every change", not wrong, "\n".join(wrong[:5]))
+        vehicle.disconnect()
+
+
 async def output_selector_scenario():
     """Choosing another output in the Servo outputs step redraws its fields with that output's own settings."""
     app = WizardApp(demo="rover")
@@ -897,6 +930,10 @@ def test_job_ending_while_a_step_is_mounted():
 
 def test_leaving_with_unapplied_values():
     asyncio.run(leaving_with_unapplied_values_scenario())
+
+
+def test_current_step_is_highlighted_and_visible_in_the_sidebar():
+    asyncio.run(current_step_in_sidebar_scenario())
 
 
 def test_output_selector_reloads_the_fields():

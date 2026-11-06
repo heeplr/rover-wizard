@@ -208,9 +208,12 @@ class MainScreen(Screen):
         return f"{self.flow.mark(index, self.step_index)} {STEPS[index].title}"
 
     def _refresh_nav(self) -> None:
-        """Update sidebar marks, hide steps that don't apply, disable steps that aren't reachable yet."""
+        """Update sidebar marks, highlight the current step, hide steps that don't apply, disable steps that aren't
+        reachable yet."""
         for index in range(len(STEPS)):
             button = self.query_one(f"#nav-{index}", Button)
+            # the highlight doesn't depend on the mark (done/skipped steps can be the current one) or the focus
+            button.set_class(index == self.step_index, "current")
             button.display = self.flow.does_apply(index)
             if button.display:
                 button.label = self._nav_label(index)
@@ -323,6 +326,8 @@ class MainScreen(Screen):
         self._refresh_fields()
         box.scroll_home(animate=False)
         self._refresh_nav()
+        # once the sidebar's layout has settled (entries may have been shown or hidden)
+        self.call_after_refresh(self.query_one(f"#nav-{index}", Button).scroll_visible, animate=False)
         if step.on_enter is not None:
             self.run_job(lambda: step.on_enter(ctx), "")
 

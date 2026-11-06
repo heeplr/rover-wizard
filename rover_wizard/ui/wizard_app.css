@@ -34,6 +34,8 @@ Button.nav {
     text-align: left; content-align: left middle;
 }
 Button.nav:disabled { color: $text-disabled; text-style: dim; }
+/* The step being shown - whatever its mark, and whether or not it has the focus. */
+Button.nav.current { background: $accent; color: auto 90%; text-style: bold; }
 #main { width: 1fr; padding: 0 1; }
 /* Status bar: deliberately high-contrast so link/armed/mode state is easy to spot at a glance. */
 #status { height: 1; background: blue; color: yellow; text-style: bold; }
