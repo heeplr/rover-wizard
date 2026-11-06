@@ -23,6 +23,8 @@ COMPONENT_ID = 1
 TELEMETRY_PERIOD = 0.1
 FIRMWARE_VERSION = (4, 5, 7)
 RC_CHANNEL_COUNT = 12
+# bytes per LOG_DATA piece
+LOG_PIECE_SIZE = 90
 
 
 def default_parameters() -> dict:
@@ -87,6 +89,21 @@ class FakeAutopilot:
         self.custom_mode = 4
         self.received: list = []
         self.servo_pwm = [1500 if number in (1, 3) else 0 for number in range(1, 17)]
+        # onboard logs: (UTC time [s], content), the oldest first
+        self.logs: list = []
+        # every this-many-th LOG_DATA piece of a whole-log request is lost on the way (0 = none)
+        self.lose_every = 0
+        # a transfer still running (sending, or left behind by an interrupted download): list / data requests are
+        # ignored ("Log download in progress") until it has sent everything or LOG_REQUEST_END ends it
+        self.log_transfer_running = False
+        # offset -> seconds: the whole-log transfer pauses there (like a slow SD card in a large log)
+        self.log_stalls: dict = {}
+        # offsets where the next file read returns only half a piece - ArduPilot then sends that and ends the transfer
+        self.log_short_reads: set = set()
+        # until this time.time() the link is broken: nothing gets through in either direction
+        self.silent_until = 0.0
+        # counts transfers, so an ended one stops sending
+        self._log_transfer_number = 0
         self._running = True
         self._lock = threading.Lock()
         for target in (self._telemetry_loop, self._receive_loop):
@@ -145,9 +162,17 @@ class FakeAutopilot:
         elif self.param_errors:
             self.link.mav.param_error_send(255, 0, name.encode(), -1, mavlink.MAV_PARAM_ERROR_DOES_NOT_EXIST)
 
+    @property
+    def silent(self) -> bool:
+        """Whether the link is broken right now (silent_until)."""
+        return time.time() < self.silent_until
+
     def _telemetry_loop(self) -> None:
         """Heartbeat plus the telemetry the wizard reads, ten times a second."""
         while self._running:
+            if self.silent:
+                time.sleep(TELEMETRY_PERIOD)
+                continue
             base_mode = mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | (
                 mavlink.MAV_MODE_FLAG_SAFETY_ARMED if self.armed else 0
             )
@@ -176,7 +201,7 @@ class FakeAutopilot:
                 continue
             except OSError:
                 return
-            if message is None or message.get_type() == "BAD_DATA":
+            if message is None or message.get_type() == "BAD_DATA" or self.silent:
                 continue
             with self._lock:
                 self.received.append(message)
@@ -206,6 +231,66 @@ class FakeAutopilot:
                     )
             elif msg_type == "COMMAND_LONG":
                 self._handle_command(message)
+            elif msg_type.startswith("LOG_"):
+                self._handle_log_request(message)
+
+    def _handle_log_request(self, message) -> None:
+        """LOG_REQUEST_LIST / _DATA / _END and LOG_ERASE, like AP_Logger_MAVLinkLogTransfer (nothing while armed)."""
+        msg_type = message.get_type()
+        if self.armed:
+            self.link.mav.statustext_send(mavlink.MAV_SEVERITY_INFO, b"Disarm for log download")
+            return
+        if msg_type == "LOG_REQUEST_END":
+            self.log_transfer_running = False
+            return
+        if self.log_transfer_running and msg_type == "LOG_REQUEST_LIST":
+            self.link.mav.statustext_send(mavlink.MAV_SEVERITY_INFO, b"Log download in progress")
+            return
+        if self.log_transfer_running and msg_type == "LOG_REQUEST_DATA":
+            # from the link that is being sent to: dropped without a word
+            return
+        count = len(self.logs)
+        if msg_type == "LOG_REQUEST_LIST":
+            if not count:
+                self.link.mav.log_entry_send(0, 0, 0, 0, 0)
+            for log_id in range(max(message.start, 1), min(message.end, count) + 1):
+                time_utc, content = self.logs[log_id - 1]
+                self.link.mav.log_entry_send(log_id, count, count, time_utc, len(content))
+        elif msg_type == "LOG_REQUEST_DATA" and 1 <= message.id <= count:
+            self.log_transfer_running = True
+            self._log_transfer_number += 1
+            arguments = (self._log_transfer_number, message.id, message.ofs, message.count)
+            threading.Thread(target=self._send_log_data, args=arguments, daemon=True).start()
+        elif msg_type == "LOG_ERASE":
+            self.logs.clear()
+
+    def _send_log_data(self, number: int, log_id: int, start: int, count: int) -> None:
+        """One transfer: LOG_DATA pieces until `count` bytes or the end of the log (or LOG_REQUEST_END) - while the
+        receive loop goes on handling (and mostly ignoring) requests, like ArduPilot."""
+        content = self.logs[log_id - 1][1]
+        end = min(len(content), start + count)
+        whole = start == 0 and end == len(content)
+        for index, offset in enumerate(range(start, end, LOG_PIECE_SIZE)):
+            if number != self._log_transfer_number or not self.log_transfer_running or not self._running:
+                return
+            if whole and offset in self.log_stalls:
+                time.sleep(self.log_stalls[offset])
+            if whole and self.lose_every and index % self.lose_every == self.lose_every - 1 or self.silent:
+                # lost on the way (ArduPilot goes on sending: it doesn't know)
+                time.sleep(0.001)
+                continue
+            piece = content[offset : min(offset + LOG_PIECE_SIZE, end)]
+            short = offset in self.log_short_reads
+            if short:
+                self.log_short_reads.discard(offset)
+                piece = piece[: LOG_PIECE_SIZE // 2]
+            self.link.mav.log_data_send(log_id, offset, len(piece), piece.ljust(LOG_PIECE_SIZE, b"\0"))
+            if short:
+                break
+            # like a radio link: don't flood the UDP socket
+            time.sleep(0.001)
+        if number == self._log_transfer_number:
+            self.log_transfer_running = False
 
     def _handle_command(self, message) -> None:
         """Acknowledge a command, with ArduPilot's side effects for the ones the wizard relies on."""

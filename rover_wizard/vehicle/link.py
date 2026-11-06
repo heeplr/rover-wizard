@@ -179,6 +179,8 @@ ARDUPILOT_DEFAULT_RCMAP = (1, 3)
 
 # [s] between RELAY_STATUS reports: relays rarely change, and a click asks for the new state at once
 RELAY_STATUS_PERIOD_SECONDS = 3.0
+# LOG_REQUEST_LIST.end_id for "up to the last log"
+LOG_LIST_ALL = 0xFFFF
 # [Hz] the controllers' PID_TUNING while controller_reports() asks for them (drive samples come at 10-20 Hz)
 PID_TUNING_RATE_HZ = 20
 # Every telemetry group (REQUEST_DATA_STREAM, all streams) at this rate - for what STREAMS doesn't name, e.g. the
@@ -369,6 +371,8 @@ class Vehicle:
         self._text_count = 0
         # component id -> (text id, severity, pieces so far, time of the latest piece) of a text arriving in pieces
         self._text_pieces: dict = {}
+        # message type -> callback(message), called from the reader thread (e.g. the log download's LOG_DATA)
+        self._listeners: dict = {}
         # inbox name -> queue of messages for an action to consume (see INBOX_*), at most INBOX_SIZE each
         self._inbox = collections.defaultdict(lambda: collections.deque(maxlen=INBOX_SIZE))
         # command id -> latest COMMAND_ACK result
@@ -508,6 +512,32 @@ class Vehicle:
         """The MAVLink system id the wizard currently sends as (None before connecting)."""
         return None if self.master is None else int(self.master.source_system)
 
+    # ================================================================== onboard logs (LOG_* messages)
+    def listen(self, msg_type: str, callback: Optional[Callable]) -> None:
+        """Hand every message of this type to callback(message) (from the reader thread); None stops it."""
+        if callback is None:
+            self._listeners.pop(msg_type, None)
+        else:
+            self._listeners[msg_type] = callback
+
+    def request_log_list(self, first: int = 0, last: int = LOG_LIST_ALL) -> None:
+        """Ask for LOG_ENTRY of the logs first..last (list positions, 1 = oldest)."""
+        self._send(lambda: self.master.mav.log_request_list_send(self.system_id, self.component_id, first, last))
+
+    def request_log_data(self, log_id: int, offset: int, count: int) -> None:
+        """Ask for `count` bytes of a log from `offset` on (LOG_DATA pieces of up to 90 bytes)."""
+        self._send(
+            lambda: self.master.mav.log_request_data_send(self.system_id, self.component_id, log_id, offset, count)
+        )
+
+    def end_log_transfer(self) -> None:
+        """Tell the autopilot the download is over (it may log again)."""
+        self._send(lambda: self.master.mav.log_request_end_send(self.system_id, self.component_id))
+
+    def erase_logs(self) -> None:
+        """Erase ALL logs on the vehicle (MAVLink has no message to erase a single one)."""
+        self._send(lambda: self.master.mav.log_erase_send(self.system_id, self.component_id))
+
     def disconnect(self) -> None:
         """Stop the reader thread and close the link."""
         self._stop_event.set()
@@ -629,6 +659,10 @@ class Vehicle:
         elif message.get_srcComponent() != self.component_id:
             return
 
+        listener = self._listeners.get(msg_type)
+        if listener is not None:
+            listener(message)
+            return
         timestamp = timebase.now()
         self._store_message(msg_type, message, timestamp)
         if msg_type == "HEARTBEAT":

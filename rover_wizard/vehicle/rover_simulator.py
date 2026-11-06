@@ -115,11 +115,13 @@ from .link import (
     INBOX_ACCEL_CALIBRATION,
     INBOX_MAG_CAL_PROGRESS,
     INBOX_MAG_CAL_REPORT,
+    LOG_LIST_ALL,
     MODE_CHANGE_TIMEOUT,
     PRESSURE_MESSAGES,
     PidSample,
     Vehicle,
 )
+from .sim_logs import SimulatedLogs
 
 # TEMP1..TEMP3 (ArduPilot has more; the wizard sets up three)
 SIMULATED_TEMPERATURE_SENSORS = range(1, 4)
@@ -389,6 +391,8 @@ class SimVehicle(Vehicle):
         # message id -> rate [Hz] the wizard last asked for with set_message_rate() (0 = default rate)
         self.message_rates: dict = {}
         self._running = False
+        # the logs on the simulated SD card (tests and the demo fill onboard_logs.logs)
+        self.onboard_logs = SimulatedLogs(self)
         self._build_params()
 
     # ------------------------------------------------------------------ parameters
@@ -787,6 +791,22 @@ class SimVehicle(Vehicle):
     def set_message_rate(self, message_id: int, rate_hz: float) -> None:
         """Only noted in message_rates (the simulator always publishes everything)."""
         self.message_rates[message_id] = rate_hz
+
+    def request_log_list(self, first: int = 0, last: int = LOG_LIST_ALL) -> None:
+        """Answered by the simulated logs."""
+        self.onboard_logs.request_list(first, last)
+
+    def request_log_data(self, log_id: int, offset: int, count: int) -> None:
+        """Answered by the simulated logs."""
+        self.onboard_logs.request_data(log_id, offset, count)
+
+    def end_log_transfer(self) -> None:
+        """Ends a simulated transfer still running."""
+        self.onboard_logs.end_transfer()
+
+    def erase_logs(self) -> None:
+        """Erases the simulated logs."""
+        self.onboard_logs.erase()
 
     def fetch_params(self, progress=None, timeout: float = 0) -> None:
         """Nothing to download - the parameters are already in memory."""

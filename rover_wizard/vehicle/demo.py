@@ -16,11 +16,15 @@ def demo_vehicle(kind: str, wired_wrong: bool = False):
     if kind == "boat":
         from .boat_simulator import SimBoat
 
-        return SimBoat(wired_wrong=wired_wrong)
-    if kind == "sailboat":
+        vehicle = SimBoat(wired_wrong=wired_wrong)
+    elif kind == "sailboat":
         from .sail_simulator import SimSailboat
 
-        return SimSailboat(wired_wrong=wired_wrong)
-    from .rover_simulator import SimVehicle
+        vehicle = SimSailboat(wired_wrong=wired_wrong)
+    else:
+        from .rover_simulator import SimVehicle
 
-    return SimVehicle(skid=kind == "skid", wired_wrong=wired_wrong)
+        vehicle = SimVehicle(skid=kind == "skid", wired_wrong=wired_wrong)
+    # a few logs on the "SD card" for trying --logs / --get-log
+    vehicle.onboard_logs.add_demo_logs()
+    return vehicle

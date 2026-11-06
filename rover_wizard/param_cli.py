@@ -24,6 +24,7 @@ import sys
 from dataclasses import dataclass
 from typing import Optional, TextIO
 
+from .cli_connection import connect_for_command_line
 from .util.errors import VehicleError
 from .ui.param_docs import is_reboot_required, validation_error
 from .util.values import are_nearly_equal
@@ -198,19 +199,8 @@ def run_from_command_line(
         print("Nothing done.", file=err)
         return EXIT_USAGE
 
-    if demo:
-        from .vehicle.demo import demo_vehicle
-
-        vehicle = demo_vehicle(demo)
-    else:
-        from .vehicle.link import Vehicle
-
-        vehicle = Vehicle()
-
-    try:
-        vehicle.connect(connection, baud_rate, link_only=True)
-    except VehicleError as error:
-        print(f"Error: {error}", file=err)
+    vehicle = connect_for_command_line(connection, baud_rate, demo, err)
+    if vehicle is None:
         return EXIT_FAILED
 
     try:
