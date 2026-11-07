@@ -151,10 +151,11 @@ def test_ff_follows_the_weighted_average_of_the_rounds_near_the_target():
     # far from the target (another operating point): corrects FF, but isn't averaged in
     tuner.next_gains(response(error=0.5, final_value=0.5, output=0.4))
     assert tuner.gains["ff"] == pytest.approx(0.8)
-    # near the target: 1.6 per unit achieved (precise), then 1.3 (three times as uncertain: a ninth of the weight)
+    # near the target (within FF_ESTIMATE_BAND): 1.6 per unit achieved (precise), then 1.3 (three times as
+    # uncertain: a ninth of the weight)
     tuner.next_gains(replace(response(error=0.07, final_value=0.93, output=0.93 * 1.6), error_uncertainty=0.01))
     assert tuner.gains["ff"] == pytest.approx(1.6)
-    measured = replace(response(error=-0.25, final_value=1.25, output=1.25 * 1.3), error_uncertainty=0.03)
+    measured = replace(response(error=-0.12, final_value=1.12, output=1.12 * 1.3), error_uncertainty=0.03)
     change = tuner.next_gains(measured)
     assert "weighted average of 2 rounds" in change.reason
     # towards (9 x 1.6 + 1.3) / 10 = 1.57, damped: FF's direction reversed - and the reason names the value applied
