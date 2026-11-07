@@ -148,3 +148,24 @@ def test_speed_tests_stay_within_wp_speed():
     with pytest.raises(VehicleError, match="WP_SPEED = 0.3"):
         action_verify_steering_controller(ctx)
     veh.disconnect()
+
+
+def test_samples_follow_the_clock_even_when_the_simulator_thread_stalls(monkeypatch):
+    """A busy machine (CI) may not run the simulator's background thread for a while: a sample still shows the
+    vehicle where it is now, not frozen where the thread left it."""
+    from rover_wizard.vehicle import rover_simulator
+
+    veh, ctx = make()
+    try:
+        # the thread sleeps for a minute after its current round
+        monkeypatch.setattr(rover_simulator, "LOOP_PERIOD", 60.0)
+        time.sleep(0.05)
+        veh.speed = 1.0
+        travelled = veh.distance_travelled
+        first = veh.sample()
+        timebase.sleep(0.5)
+        second = veh.sample()
+        check("time passed", second.time - first.time >= 0.5)
+        check("the vehicle moved meanwhile", veh.distance_travelled - travelled > 0.2, veh.distance_travelled)
+    finally:
+        veh.disconnect()

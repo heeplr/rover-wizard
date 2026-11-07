@@ -152,6 +152,8 @@ PROBED_BARO_BITS = sum(bit for bit, _ in BARO_PROBE_EXT_BITS)
 PHYSICS_STEP = 0.02
 # [s] real time between telemetry updates
 LOOP_PERIOD = 0.01
+# [s] of wizard time integrated at most at once (longer gaps, e.g. a debugger pause, are skipped)
+MAX_CATCH_UP_SECONDS = 1.0
 # [m/s] standard deviation of the speed noise
 SPEED_NOISE = 0.015
 # [rad/s] standard deviation of the yaw-rate noise
@@ -391,6 +393,9 @@ class SimVehicle(Vehicle):
         # message id -> rate [Hz] the wizard last asked for with set_message_rate() (0 = default rate)
         self.message_rates: dict = {}
         self._running = False
+        # the wizard time the physics has been integrated up to (from start()); one thread integrates at a time
+        self._physics_time = 0.0
+        self._physics_lock = threading.Lock()
         # the logs on the simulated SD card (tests and the demo fill onboard_logs.logs)
         self.onboard_logs = SimulatedLogs(self)
         self._build_params()
@@ -745,8 +750,9 @@ class SimVehicle(Vehicle):
 
     def start(self) -> None:
         """Start the physics/telemetry thread and publish the initial telemetry."""
+        self._physics_time = timebase.now()
         self._running = True
-        self._publish_telemetry(timebase.now())
+        self._publish_telemetry(self._physics_time)
         threading.Thread(target=self._loop, daemon=True).start()
         self._add_status_text(f"ArduRover V{'.'.join(map(str, self.FIRMWARE_VERSION))} (simulated)")
 
@@ -1016,6 +1022,9 @@ class SimVehicle(Vehicle):
 
     def sample(self) -> DriveSample:
         """A drive sample with measurement noise; pilot inputs are only meaningful in Manual/Acro."""
+        # up to now first: the background thread may not have run for a while (a busy machine), and a sample of a
+        # frozen vehicle would make the wizard misjudge it
+        self._advance_physics()
         manual = self.custom_mode in (MODES["MANUAL"], MODES["ACRO"])
         steering, throttle = self._current_sticks() if manual else (0.0, 0.0)
         sample = DriveSample(
@@ -1188,21 +1197,28 @@ class SimVehicle(Vehicle):
         self.distance_travelled += self.speed * step
 
     def _loop(self) -> None:
-        """Background thread: integrate the physics in fixed steps and publish telemetry."""
-        last = timebase.now()
+        """Background thread: integrate the physics and publish telemetry."""
         while self._running:
             # real-time pacing; the physics itself runs on the (scaled) wizard clock
             time.sleep(LOOP_PERIOD)
+            self._publish_telemetry(self._advance_physics())
+
+    def _advance_physics(self) -> float:
+        """Integrate the wizard time since the last call in PHYSICS_STEP pieces - from the background thread, and from
+        sample() so a stalled thread doesn't freeze the vehicle; returns the time integrated up to. Capped at
+        MAX_CATCH_UP_SECONDS (after e.g. a debugger pause)."""
+        with self._physics_lock:
             current = timebase.now()
-            # Integrate the elapsed wizard time in PHYSICS_STEP pieces (capped at 1 s after e.g. a debugger pause).
-            # Both computed from the OLD `last`, so they must stay one simultaneous assignment.
-            remaining, last = min(current - last, 1.0), current
+            if not self._running:
+                return current
+            remaining = min(current - self._physics_time, MAX_CATCH_UP_SECONDS)
+            self._physics_time = current
             # integrate until (practically) no time is left
             while remaining > 1e-6:
                 step = min(remaining, PHYSICS_STEP)
                 self._physics_step(step)
                 remaining -= step
-            self._publish_telemetry(current)
+        return current
 
     def _advance_accel_calibration(self, timestamp: float) -> None:
         """Like AP_AccelCal::update: repeat the position request until confirmed, then collect, then move on."""
