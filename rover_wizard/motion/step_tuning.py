@@ -55,7 +55,7 @@ SMALL_OVERSHOOT = 0.10
 LARGE_STEADY_ERROR = 0.10
 # FF measurements of rounds that got within this fraction of the target are averaged (further off, the vehicle runs
 # at another operating point, which needn't take the same FF)
-FF_ESTIMATE_BAND = 0.30
+FF_ESTIMATE_BAND = 0.15
 # a round's measured error isn't trusted more precisely than this (the weight of its FF measurement is capped)
 MIN_ERROR_UNCERTAINTY = 0.005
 # steady-state error of 5..10 %
