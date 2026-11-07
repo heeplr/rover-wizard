@@ -21,7 +21,7 @@
 | rover\_wizard/motion/gps\_heading.py             |       48 |        1 |       18 |        2 |     95% |50, 71-\>64 |
 | rover\_wizard/motion/sail\_test.py               |       11 |        0 |        2 |        0 |    100% |           |
 | rover\_wizard/motion/servo\_test.py              |      291 |       10 |       82 |        7 |     95% |118-119, 123-124, 132-133, 272-\>274, 406, 445, 483, 496 |
-| rover\_wizard/motion/step\_tuning.py             |      180 |        4 |       54 |        3 |     97% |169, 181, 356-357 |
+| rover\_wizard/motion/step\_tuning.py             |      188 |        4 |       54 |        3 |     97% |177, 189, 370-371 |
 | rover\_wizard/motion/vibration.py                |       23 |        0 |        6 |        0 |    100% |           |
 | rover\_wizard/param\_cli.py                      |      120 |        5 |       40 |        2 |     96% |97, 122-124, 164 |
 | rover\_wizard/rover\_defs.py                     |       74 |        0 |        0 |        0 |    100% |           |
@@ -111,10 +111,10 @@
 | rover\_wizard/vehicle/link.py                    |      787 |       24 |      228 |       17 |     96% |544-\>548, 563, 575-576, 604-605, 633-634, 644-645, 692, 695, 752-\>exit, 774-777, 869-871, 991, 1057-\>1055, 1207, 1215, 1232, 1273, 1285, 1430, 1442 |
 | rover\_wizard/vehicle/log\_transfer.py           |      209 |       11 |       74 |       13 |     90% |123-\>131, 127-129, 134, 217-218, 220-\>222, 225-227, 233-\>235, 242-\>244, 245, 246-\>248, 272, 276-\>280, 280-\>exit |
 | rover\_wizard/vehicle/rc\_scaling.py             |       24 |        1 |        8 |        1 |     94% |        39 |
-| rover\_wizard/vehicle/rover\_simulator.py        |      637 |        9 |      196 |       10 |     97% |729, 827, 829, 849-850, 874, 877-882, 1115-\>1118, 1120-\>1122, 1253-\>exit, 1415 |
+| rover\_wizard/vehicle/rover\_simulator.py        |      647 |        9 |      198 |       10 |     98% |734, 833, 835, 855-856, 880, 883-888, 1124-\>1127, 1129-\>1131, 1269-\>exit, 1431 |
 | rover\_wizard/vehicle/sail\_simulator.py         |       97 |        0 |       32 |        1 |     99% | 119-\>121 |
 | rover\_wizard/vehicle/sim\_logs.py               |       63 |        3 |       28 |        4 |     92% |49-50, 61-\>exit, 80, 97-\>exit |
-| **TOTAL**                                        | **8135** |  **268** | **2160** |  **244** | **95%** |           |
+| **TOTAL**                                        | **8153** |  **268** | **2162** |  **244** | **95%** |           |
 
 
 ## Setup coverage badge
