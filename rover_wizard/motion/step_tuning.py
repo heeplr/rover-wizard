@@ -15,7 +15,8 @@ What makes it robust against real data:
 * A steady-state error is corrected through FF where it can be (the output the vehicle needed, per unit achieved):
   ArduPilot's rate controllers rely on FF for it, I only builds up slowly within a short step. That measurement
   depends on the vehicle only, not on the gains, so every round near the target measures the same value - and FF is
-  set to their average: a single round's noise doesn't make it swing.
+  set to their average, weighted by how precise each round's measurement was (noise, number of samples): a single
+  round's noise doesn't make it swing.
 * When measurement noise makes the controller's output jitter, an error filter (FLTE) well above the loop's
   bandwidth is proposed (suggest_error_filter).
 * A gain whose change reverses the previous round's direction changes only half as much (in proportion) as before,
@@ -25,7 +26,7 @@ What makes it robust against real data:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 # fewer samples inside a step than this -> no metrics
@@ -52,6 +53,11 @@ LARGE_OVERSHOOT = 0.20
 SMALL_OVERSHOOT = 0.10
 # steady-state error above 10 %: FF or integrator too weak
 LARGE_STEADY_ERROR = 0.10
+# FF measurements of rounds that got within this fraction of the target are averaged (further off, the vehicle runs
+# at another operating point, which needn't take the same FF)
+FF_ESTIMATE_BAND = 0.30
+# a round's measured error isn't trusted more precisely than this (the weight of its FF measurement is capped)
+MIN_ERROR_UNCERTAINTY = 0.005
 # steady-state error of 5..10 %
 SMALL_STEADY_ERROR = 0.05
 # lower P and I clearly
@@ -108,6 +114,8 @@ class StepResponse:
     # how much the controller's P and D parts jitter over the end of the step (standard deviation, in output units
     # -1..1): noise in the measurement passed on to the actuator; None without the controller's reports
     jitter: Optional[float] = None
+    # standard error of measured_error (the noise of the mean over the end of the step, as a fraction of the target)
+    error_uncertainty: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -200,7 +208,9 @@ def step_response_metrics(
     # Steady-state error = fraction of the target missing at the end, unless within the noise of the mean.
     missing = aimed - final_value
     measured_error = missing / aimed
-    steady_state_error = measured_error if abs(missing) > NOISE_SIGMAS * noise / math.sqrt(len(tail)) else 0.0
+    # the noise of the mean over the steady part
+    mean_noise = noise / math.sqrt(len(tail))
+    steady_state_error = measured_error if abs(missing) > NOISE_SIGMAS * mean_noise else 0.0
     # Rise time = seconds until the smoothed value first reached 63 % of the target (one first-order time constant).
     rise_time = next(
         (time - step_on for time, value in zip(segment_times, smoothed) if value >= STEP_RISE_FRACTION * aimed), None
@@ -217,6 +227,7 @@ def step_response_metrics(
         final_value=final_value,
         target=aimed,
         noise=noise,
+        error_uncertainty=mean_noise / aimed,
         measured_error=measured_error,
         saturated=saturated,
         output=sum(tail_outputs) / len(tail_outputs) if tail_outputs else None,
@@ -271,7 +282,7 @@ class GainTuner:
         # gain -> direction of its last change (+1 up, -1 down) and how often its direction reversed
         self._last_direction: dict = {}
         self._reversals: dict = {}
-        # what FF should be, as measured by each round near the target (the FF correction uses their average)
+        # (FF, weight) as measured by each round near the target (the FF correction uses their weighted average)
         self._ff_estimates: list = []
 
     def next_gains(self, response: Optional[StepResponse]) -> GainChange:
@@ -310,27 +321,30 @@ class GainTuner:
         return GainChange(dict(self.gains), "tracking is good", converged=True)
 
     def _note_ff_estimate(self, response: StepResponse) -> None:
-        """Keep the FF this round measured (the output per unit achieved) - if it got near the target: far from it,
-        the vehicle turns (or drives) at another operating point, which needn't take the same FF."""
-        near = abs(response.measured_error) <= LARGE_STEADY_ERROR
+        """Keep the FF this round measured (the output per unit achieved), weighted by its precision (inverse
+        variance) - if it got within FF_ESTIMATE_BAND of the target."""
+        near = abs(response.measured_error) <= FF_ESTIMATE_BAND
         if "ff" in self.gains and response.output is not None and response.final_value > 0 and near:
-            self._ff_estimates.append(response.output / response.final_value)
+            weight = 1 / max(response.error_uncertainty, MIN_ERROR_UNCERTAINTY) ** 2
+            self._ff_estimates.append((response.output / response.final_value, weight))
 
     def _correct_ff(self, response: StepResponse) -> GainChange:
-        """FF = the output the vehicle needed per unit it achieved, so FF alone delivers it next time - averaged
-        over the rounds near the target once there are any (each round's measurement is noisy)."""
+        """FF = the output the vehicle needed per unit it achieved, so FF alone delivers it next time - the weighted
+        average over the rounds near the target once there are any (each round's measurement is noisy)."""
         old = self.gains["ff"]
         needed, measured = response.output / response.final_value, "the output the turn needed"
-        if self._ff_estimates and abs(response.measured_error) <= LARGE_STEADY_ERROR:
-            needed = sum(self._ff_estimates) / len(self._ff_estimates)
+        if self._ff_estimates and abs(response.measured_error) <= FF_ESTIMATE_BAND:
+            total = sum(weight for _, weight in self._ff_estimates)
+            needed = sum(value * weight for value, weight in self._ff_estimates) / total
             if len(self._ff_estimates) > 1:
-                measured += f", average of {len(self._ff_estimates)} rounds"
+                measured += f", weighted average of {len(self._ff_estimates)} rounds"
         new = max(old / FF_MAX_FACTOR, min(old * FF_MAX_FACTOR, needed)) if old > 0 else needed
-        return self._apply(
-            {"ff": new / old if old > 0 else 1.0},
-            f"steady-state error {response.measured_error:.0%} -> FF {old:.3g} -> {new:.3g} ({measured})",
-            absolute={"ff": new} if old <= 0 else None,
+        change = self._apply({"ff": new / old if old > 0 else 1.0}, "", absolute={"ff": new} if old <= 0 else None)
+        # the value applied (damped if FF's direction reversed), not the one aimed for
+        text = (
+            f"steady-state error {response.measured_error:.0%} -> FF {old:.3g} -> {self.gains['ff']:.3g} ({measured})"
         )
+        return replace(change, reason=text + change.reason)
 
     def _scale(self, factors: tuple, reason: str) -> GainChange:
         """Multiply P and I by the rule's factors (damped, see _apply)."""

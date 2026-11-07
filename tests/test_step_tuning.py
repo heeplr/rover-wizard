@@ -3,6 +3,7 @@ round-by-round gain decisions."""
 
 import math
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -143,19 +144,23 @@ def test_steady_state_error_is_corrected_through_ff_first():
     assert "FF" in change.reason
 
 
-def test_ff_is_set_to_the_average_of_the_rounds_near_the_target():
-    """Each round measures the FF the vehicle needs - with noise. FF follows their average, not the last round."""
+def test_ff_follows_the_weighted_average_of_the_rounds_near_the_target():
+    """Each round measures the FF the vehicle needs - with noise. FF follows their average, weighted by how precise
+    each measurement was, not the last round."""
     tuner = GainTuner({"ff": 0.5, "p": 0.2, "i": 0.2}, slow_rise_time=1.0)
     # far from the target (another operating point): corrects FF, but isn't averaged in
     tuner.next_gains(response(error=0.5, final_value=0.5, output=0.4))
     assert tuner.gains["ff"] == pytest.approx(0.8)
-    # near the target: 1.6, then 1.4 per unit achieved
-    tuner.next_gains(response(error=0.07, final_value=0.93, output=0.93 * 1.6))
+    # near the target: 1.6 per unit achieved (precise), then 1.3 (three times as uncertain: a ninth of the weight)
+    tuner.next_gains(replace(response(error=0.07, final_value=0.93, output=0.93 * 1.6), error_uncertainty=0.01))
     assert tuner.gains["ff"] == pytest.approx(1.6)
-    change = tuner.next_gains(response(error=-0.07, final_value=1.07, output=1.07 * 1.4))
-    assert "average of 2 rounds" in change.reason
-    # towards 1.5 (not 1.4), and damped: FF's direction reversed
-    assert change.gains["ff"] == pytest.approx(1.6 * (1.5 / 1.6) ** 0.5)
+    measured = replace(response(error=-0.25, final_value=1.25, output=1.25 * 1.3), error_uncertainty=0.03)
+    change = tuner.next_gains(measured)
+    assert "weighted average of 2 rounds" in change.reason
+    # towards (9 x 1.6 + 1.3) / 10 = 1.57, damped: FF's direction reversed - and the reason names the value applied
+    applied = 1.6 * (1.57 / 1.6) ** 0.5
+    assert change.gains["ff"] == pytest.approx(applied)
+    assert f"FF 1.6 -> {applied:.3g} " in change.reason
 
 
 def test_ff_changes_at_most_by_its_factor_per_round():
