@@ -11,6 +11,7 @@ import pytest
 from rover_wizard.motion.gps_heading import heading_after_straight_run
 from rover_wizard.mavlink_defs import MAVLINK_MSG_ID_GPS_RAW_INT
 from rover_wizard.steps.compass_drive import applies
+from rover_wizard.util import timebase
 from rover_wizard.util.errors import VehicleError
 from rover_wizard.vehicle.link import STREAMS, DriveSample
 
@@ -156,12 +157,13 @@ def test_the_pilot_can_drive_the_straight_run(heavy):
     ctx.values["how_compass"] = "manual"
 
     def pilot():
-        """Drive straight for 6 s, stop, wait until still, press Continue."""
+        """Drive straight for 6 s at speed, stop, wait until still, press Continue."""
         wait_until(lambda: ctx.waiting)
         veh.pilot_sticks = (0.0, 0.4)
-        start = time.time()
         wait_until(lambda: veh.speed > 0.6)
-        while time.time() - start < 0.4:
+        # 6 s on the wizard's clock: the same drive whatever the test's time scale (5x on macOS, 20x elsewhere)
+        start = timebase.now()
+        while timebase.now() - start < 6:
             time.sleep(0.01)
         veh.pilot_sticks = (0.0, 0.0)
         wait_until(lambda: abs(veh.speed) < 0.02)

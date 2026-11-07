@@ -65,6 +65,13 @@ async def until(pilot, condition, timeout=10.0) -> bool:
     return condition()
 
 
+def step_shown(screen, index=None) -> bool:
+    """Whether the screen has finished showing a step (this one, if given). step_index changes when show_step()
+    starts; waiting for that alone and then showing another step would mount two steps at once, which Textual
+    doesn't survive on a slow machine (a Select losing its parts while it mounts)."""
+    return not screen._steps_being_shown and (index is None or screen.step_index == index)
+
+
 async def click(pilot, widget) -> None:
     """Scroll a widget into view and click it like a user would."""
     widget.scroll_visible(animate=False)
@@ -203,7 +210,7 @@ async def main_scenario():
         await pilot.pause(0.3)
         check("second step locked before the first is done", screen.query_one("#nav-1", Button).disabled)
         await click(pilot, screen.query_one("#b-next", Button))
-        await until(pilot, lambda: screen.step_index == INDEX["steering_output"])
+        await until(pilot, lambda: step_shown(screen, INDEX["steering_output"]))
         check(
             "Next marks the step done and opens the next one",
             ctx.store.step_status("vehicle_type") == STEP_DONE and screen.step_index == INDEX["steering_output"],
@@ -364,7 +371,7 @@ async def current_step_in_sidebar_scenario():
         await screen.show_step(INDEX["serial_ports"])
         await pilot.pause(0.3)
         await pilot.click("#b-next")
-        await until(pilot, lambda: screen.step_index != INDEX["serial_ports"])
+        await until(pilot, lambda: step_shown(screen) and screen.step_index != INDEX["serial_ports"])
         await pilot.pause(0.3)
         shown_right("b-next")
         check("the current step is highlighted and visible after every change", not wrong, "\n".join(wrong[:5]))
@@ -864,13 +871,17 @@ async def leaving_with_unapplied_values_scenario():
         await click(pilot, app.screen.query_one("#discard"))
         check(
             "Discard leaves without writing",
-            await until(pilot, lambda: screen.step_index != battery) and vehicle.get("BATT_CAPACITY") == original,
+            await until(pilot, lambda: step_shown(screen) and screen.step_index != battery)
+            and vehicle.get("BATT_CAPACITY") == original,
         )
         check("Back with an edit asks again", await edit_and_go_back())
         await click(pilot, app.screen.query_one("#apply"))
         check(
             "Apply writes, then leaves",
-            await until(pilot, lambda: screen.step_index != battery and vehicle.get("BATT_CAPACITY") == 6000),
+            await until(
+                pilot,
+                lambda: step_shown(screen) and screen.step_index != battery and vehicle.get("BATT_CAPACITY") == 6000,
+            ),
         )
         await click(pilot, screen.query_one("#b-reboot"))
         await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
